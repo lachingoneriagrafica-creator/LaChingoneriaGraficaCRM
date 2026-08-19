@@ -38,12 +38,11 @@ service cloud.firestore {
 
     // Collection: /users/{userId}
     match /users/{userId} {
-      allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
-      allow list: if isSignedIn() && isAdmin();
+      allow read: if isSignedIn();
       allow create: if isSignedIn() && (isOwner(userId) || isAdmin()) && isValidId(userId);
       allow update: if isSignedIn() && (
         isAdmin() ||
-        (isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt']))
+        (isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt', 'lastLogin']))
       );
       allow delete: if isSignedIn() && isAdmin();
     }

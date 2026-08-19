@@ -6,7 +6,8 @@ import {
   ProductionJob, 
   ProductionStatus, 
   NotificationItem,
-  Product
+  Product,
+  ClientTimelineEvent
 } from './types';
 import { 
   INITIAL_CLIENTS, 
@@ -29,7 +30,7 @@ import { CRMView } from './components/CRMView';
 import { ProductsView } from './components/ProductsView';
 import { PdfExportModal } from './components/PdfExportModal';
 import { SettingsModal } from './components/SettingsModal';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDocs } from 'firebase/firestore';
 import { db } from './lib/firebase';
 import { ShieldAlert, RotateCcw } from 'lucide-react';
 
@@ -38,9 +39,9 @@ function MainAppShell() {
   
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [clients, setClients] = useState<Client[]>(INITIAL_CLIENTS);
-  const [timelineEvents, setTimelineEvents] = useState(INITIAL_TIMELINE_EVENTS);
+  const [timelineEvents, setTimelineEvents] = useState<Record<string, ClientTimelineEvent[]>>(INITIAL_TIMELINE_EVENTS);
   const [quotes, setQuotes] = useState<Quote[]>(INITIAL_QUOTES);
-  const [currentQuote, setCurrentQuote] = useState<Quote>(INITIAL_QUOTES[0]);
+  const [currentQuote, setCurrentQuote] = useState<Quote | null>(null);
   const [jobs, setJobs] = useState<ProductionJob[]>(INITIAL_PRODUCTION_JOBS);
   const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
@@ -56,42 +57,59 @@ function MainAppShell() {
   useEffect(() => {
     if (!currentUser) return;
 
-    // Clients listener
+    // Clients listener (real-time sync with /clients collection)
     const unsubClients = onSnapshot(collection(db, 'clients'), (snapshot) => {
-      if (!snapshot.empty) {
-        const fetched: Client[] = [];
-        snapshot.forEach((d) => fetched.push(d.data() as Client));
-        setClients(fetched);
-      }
+      const fetched: Client[] = [];
+      snapshot.forEach((d) => fetched.push(d.data() as Client));
+      setClients(fetched);
     }, (err) => console.warn("Clients sync:", err.message));
 
-    // Quotes listener
+    // Quotes listener (reflects empty arrays if purged)
     const unsubQuotes = onSnapshot(collection(db, 'quotes'), (snapshot) => {
-      if (!snapshot.empty) {
-        const fetched: Quote[] = [];
-        snapshot.forEach((d) => fetched.push(d.data() as Quote));
-        setQuotes(fetched);
-        if (fetched.length > 0) setCurrentQuote(fetched[0]);
+      const fetched: Quote[] = [];
+      snapshot.forEach((d) => fetched.push(d.data() as Quote));
+      setQuotes(fetched);
+      if (fetched.length > 0) {
+        setCurrentQuote(fetched[0]);
+      } else {
+        setCurrentQuote(null);
       }
     }, (err) => console.warn("Quotes sync:", err.message));
 
-    // Jobs listener
+    // Jobs listener (reflects empty arrays if purged)
     const unsubJobs = onSnapshot(collection(db, 'jobs'), (snapshot) => {
-      if (!snapshot.empty) {
-        const fetched: ProductionJob[] = [];
-        snapshot.forEach((d) => fetched.push(d.data() as ProductionJob));
-        setJobs(fetched);
-      }
+      const fetched: ProductionJob[] = [];
+      snapshot.forEach((d) => fetched.push(d.data() as ProductionJob));
+      setJobs(fetched);
     }, (err) => console.warn("Jobs sync:", err.message));
 
     // Products listener
     const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
-      if (!snapshot.empty) {
-        const fetched: Product[] = [];
-        snapshot.forEach((d) => fetched.push(d.data() as Product));
+      const fetched: Product[] = [];
+      snapshot.forEach((d) => fetched.push(d.data() as Product));
+      if (fetched.length > 0) {
         setProducts(fetched);
       }
     }, (err) => console.warn("Products sync:", err.message));
+
+    // One-time check: clean up any legacy mock documents if present in Firestore
+    const purgeLegacyMockDocs = async () => {
+      try {
+        const legacyQuoteIds = ['q1', 'q2'];
+        for (const qid of legacyQuoteIds) {
+          deleteDoc(doc(db, 'quotes', qid)).catch(() => {});
+        }
+        const legacyJobIds = ['j1', 'j2', 'j3', 'j4', 'j5', 'j6', 'j7'];
+        for (const jid of legacyJobIds) {
+          deleteDoc(doc(db, 'jobs', jid)).catch(() => {});
+        }
+        const legacyClientIds = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6'];
+        for (const cid of legacyClientIds) {
+          deleteDoc(doc(db, 'clients', cid)).catch(() => {});
+        }
+      } catch (e) {}
+    };
+    purgeLegacyMockDocs();
 
     return () => {
       unsubClients();
@@ -447,6 +465,39 @@ function MainAppShell() {
     } catch (e) {}
   };
 
+  // Purge quotes and production jobs to start fresh
+  const handlePurgeAllQuotesAndOrders = async () => {
+    setQuotes([]);
+    setJobs([]);
+    setCurrentQuote(null);
+    setTimelineEvents({});
+    setNotifications([]);
+
+    try {
+      const quotesSnap = await getDocs(collection(db, 'quotes'));
+      const deleteQuotePromises = quotesSnap.docs.map(docSnap => deleteDoc(doc(db, 'quotes', docSnap.id)));
+      
+      const jobsSnap = await getDocs(collection(db, 'jobs'));
+      const deleteJobPromises = jobsSnap.docs.map(docSnap => deleteDoc(doc(db, 'jobs', docSnap.id)));
+
+      await Promise.all([...deleteQuotePromises, ...deleteJobPromises]);
+    } catch (e) {
+      console.warn("Error purging quotes/jobs from Firestore:", e);
+    }
+  };
+
+  // Purge all clients from Firestore
+  const handlePurgeClients = async () => {
+    setClients([]);
+    try {
+      const clientsSnap = await getDocs(collection(db, 'clients'));
+      const deleteClientPromises = clientsSnap.docs.map(docSnap => deleteDoc(doc(db, 'clients', docSnap.id)));
+      await Promise.all(deleteClientPromises);
+    } catch (e) {
+      console.warn("Error purging clients from Firestore:", e);
+    }
+  };
+
   // PDF modal handler
   const handleOpenPdfModal = (quote: Quote) => {
     setPdfModalQuote(quote);
@@ -520,6 +571,8 @@ function MainAppShell() {
           {currentView === 'dashboard' && (
             <DashboardView
               jobs={jobs}
+              quotes={quotes}
+              clients={clients}
               onNewQuoteClick={() => handleCreateNewQuote()}
               onViewAllOrders={() => setCurrentView('kanban')}
               onSelectJob={(job) => {
@@ -608,9 +661,12 @@ function MainAppShell() {
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
+        onPurgeData={handlePurgeAllQuotesAndOrders}
+        onPurgeClients={handlePurgeClients}
       />
     </div>
   );
+
 }
 
 export default function App() {

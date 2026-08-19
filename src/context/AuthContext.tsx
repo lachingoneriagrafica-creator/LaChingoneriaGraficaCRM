@@ -10,6 +10,7 @@ import {
   getDoc, 
   setDoc, 
   updateDoc, 
+  deleteDoc,
   collection, 
   onSnapshot 
 } from 'firebase/firestore';
@@ -30,8 +31,21 @@ interface AuthContextType {
     uid: string, 
     role: UserRole, 
     status: 'active' | 'pending' | 'disabled', 
-    customPermissions?: Partial<UserProfile['permissions']>
+    customPermissions?: Partial<UserProfile['permissions']>,
+    additionalData?: { displayName?: string; department?: string; phone?: string }
   ) => Promise<void>;
+  createUserProfile: (
+    profileData: {
+      email: string;
+      displayName: string;
+      role: UserRole;
+      status: 'active' | 'pending' | 'disabled';
+      department?: string;
+      phone?: string;
+      permissions?: Partial<UserProfile['permissions']>;
+    }
+  ) => Promise<string>;
+  deleteUserProfile: (uid: string) => Promise<void>;
   activeRole: UserRole;
   isSimulatingRole: boolean;
   setSimulatedRole: (role: UserRole | null) => void;
@@ -39,7 +53,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Initial staff fallback data for preview and local directory
+// Initial fallback staff in case of fresh database or offline
 const INITIAL_STAFF: UserProfile[] = [
   {
     uid: 'admin_master_1',
@@ -51,39 +65,6 @@ const INITIAL_STAFF: UserProfile[] = [
     department: 'Dirección General',
     permissions: ROLE_DEFAULT_PERMISSIONS.admin,
     createdAt: '2023-10-01'
-  },
-  {
-    uid: 'staff_gerente_2',
-    email: 'gerencia@lachingoneria.mx',
-    displayName: 'Lic. Mariana Soto',
-    photoURL: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=120&auto=format&fit=crop&q=80',
-    role: 'gerente',
-    status: 'active',
-    department: 'Ventas & Cotizaciones',
-    permissions: ROLE_DEFAULT_PERMISSIONS.gerente,
-    createdAt: '2023-10-05'
-  },
-  {
-    uid: 'staff_diseno_3',
-    email: 'arte@lachingoneria.mx',
-    displayName: 'Carlos Vega',
-    photoURL: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80',
-    role: 'disenador',
-    status: 'active',
-    department: 'Pre-prensa & CTP',
-    permissions: ROLE_DEFAULT_PERMISSIONS.disenador,
-    createdAt: '2023-10-10'
-  },
-  {
-    uid: 'staff_prod_4',
-    email: 'taller@lachingoneria.mx',
-    displayName: 'Roberto Mendez',
-    photoURL: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120&auto=format&fit=crop&q=80',
-    role: 'produccion',
-    status: 'active',
-    department: 'Prensa Offset & Acabados',
-    permissions: ROLE_DEFAULT_PERMISSIONS.produccion,
-    createdAt: '2023-10-12'
   }
 ];
 
@@ -99,23 +80,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Listen to Firebase Auth state
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    let profileUnsub: (() => void) | null = null;
+
+    const authUnsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setCurrentUser(firebaseUser);
+
+      if (profileUnsub) {
+        profileUnsub();
+        profileUnsub = null;
+      }
 
       if (firebaseUser) {
         try {
           const userDocRef = doc(db, 'users', firebaseUser.uid);
+          const isMainAdmin = 
+            firebaseUser.email?.toLowerCase() === 'lachingoneriagrafica@gmail.com' || 
+            firebaseUser.email?.toLowerCase().includes('admin');
+
+          // Check if document exists
           const userSnap = await getDoc(userDocRef);
 
-          const isMainAdmin = 
-            firebaseUser.email === 'lachingoneriagrafica@gmail.com' || 
-            firebaseUser.email?.includes('admin');
-
-          if (userSnap.exists()) {
-            const data = userSnap.data() as UserProfile;
-            setUserProfile(data);
-          } else {
-            // Create user profile in Firestore if not already existing
+          if (!userSnap.exists()) {
+            // First time login: create user in Firestore
             const assignedRole: UserRole = isMainAdmin ? 'admin' : 'gerente';
             const newProfile: UserProfile = {
               uid: firebaseUser.uid,
@@ -124,6 +110,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               photoURL: firebaseUser.photoURL || undefined,
               role: assignedRole,
               status: 'active',
+              department: isMainAdmin ? 'Dirección General' : 'Ventas & Cotizaciones',
               permissions: ROLE_DEFAULT_PERMISSIONS[assignedRole],
               createdAt: new Date().toISOString(),
               lastLogin: new Date().toISOString(),
@@ -131,19 +118,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             await setDoc(userDocRef, newProfile);
 
-            // If main admin, set admin flag document
-            if (isMainAdmin) {
+            if (assignedRole === 'admin') {
               await setDoc(doc(db, 'admins', firebaseUser.uid), {
                 uid: firebaseUser.uid,
                 email: firebaseUser.email,
                 assignedAt: new Date().toISOString()
-              });
+              }).catch(() => {});
             }
 
             setUserProfile(newProfile);
+          } else {
+            // Existing user: record last login
+            const existingData = userSnap.data() as UserProfile;
+            setUserProfile(existingData);
+            updateDoc(userDocRef, { lastLogin: new Date().toISOString() }).catch(() => {});
           }
+
+          // Real-time listener on active user's document to catch instant role/privilege changes from admin
+          profileUnsub = onSnapshot(userDocRef, (snap) => {
+            if (snap.exists()) {
+              const updatedProfile = snap.data() as UserProfile;
+              setUserProfile(updatedProfile);
+            }
+          }, (err) => {
+            console.warn("User profile live sync warning:", err.message);
+          });
+
         } catch (err) {
-          console.warn("User profile sync fallback:", err);
+          console.warn("User profile sync error:", err);
           setUserProfile({
             uid: firebaseUser.uid,
             email: firebaseUser.email || '',
@@ -160,10 +162,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      authUnsubscribe();
+      if (profileUnsub) profileUnsub();
+    };
   }, []);
 
-  // Subscribe to all users in Firestore for the Admin Dashboard
+  // Subscribe in real-time to all users in Firestore for the Admin Dashboard
   useEffect(() => {
     if (!currentUser) return;
 
@@ -176,22 +181,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           snapshot.forEach((docSnap) => {
             userList.push(docSnap.data() as UserProfile);
           });
-          const merged = [...userList];
-          INITIAL_STAFF.forEach(staff => {
-            if (!merged.some(u => u.uid === staff.uid || u.email === staff.email)) {
-              merged.push(staff);
-            }
-          });
-          setAllUsers(merged);
+          // Sort by name
+          userList.sort((a, b) => a.displayName.localeCompare(b.displayName));
+          setAllUsers(userList);
+        } else {
+          // If Firestore is empty, seed with current user profile
+          if (userProfile) {
+            setAllUsers([userProfile]);
+          }
         }
       },
       (error) => {
-        console.warn("Snapshot users listener warning:", error.message);
+        console.warn("Users collection snapshot warning:", error.message);
       }
     );
 
     return () => unsubscribe();
-  }, [currentUser]);
+  }, [currentUser, userProfile]);
 
   // Login with Email & Password
   const loginWithEmailPassword = async (email: string, password: string) => {
@@ -223,7 +229,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Demo user login for testing and previewing
   const loginAsDemoUser = (role: UserRole) => {
     setAuthErrorMessage(null);
-    const demoUser = INITIAL_STAFF.find(u => u.role === role) || INITIAL_STAFF[0];
+    const demoUser: UserProfile = {
+      uid: 'demo_' + role + '_' + Date.now(),
+      email: `${role}@lachingoneria.mx`,
+      displayName: role === 'admin' ? 'Super Admin LCG' : role === 'gerente' ? 'Gerente de Ventas' : role === 'disenador' ? 'Diseñador Pre-prensa' : 'Operador de Taller',
+      role,
+      status: 'active',
+      department: role === 'admin' ? 'Dirección General' : role === 'gerente' ? 'Ventas' : role === 'disenador' ? 'Arte & CTP' : 'Taller Offset',
+      permissions: ROLE_DEFAULT_PERMISSIONS[role],
+    };
     setUserProfile(demoUser);
     setCurrentUser({
       uid: demoUser.uid,
@@ -247,50 +261,130 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAuthErrorMessage(null);
   };
 
+  // Update role and privileges directly in Firestore
   const updateUserRoleAndPermissions = async (
     uid: string, 
     role: UserRole, 
     status: 'active' | 'pending' | 'disabled',
-    customPermissions?: Partial<UserProfile['permissions']>
+    customPermissions?: Partial<UserProfile['permissions']>,
+    additionalData?: { displayName?: string; department?: string; phone?: string }
   ) => {
     const permissions = {
       ...ROLE_DEFAULT_PERMISSIONS[role],
       ...(customPermissions || {})
     };
 
+    const updatePayload: Record<string, any> = {
+      role,
+      status,
+      permissions,
+      updatedAt: new Date().toISOString()
+    };
+
+    if (additionalData?.displayName) updatePayload.displayName = additionalData.displayName;
+    if (additionalData?.department) updatePayload.department = additionalData.department;
+    if (additionalData?.phone !== undefined) updatePayload.phone = additionalData.phone;
+
     try {
       const userRef = doc(db, 'users', uid);
-      await updateDoc(userRef, {
-        role,
-        status,
-        permissions,
-        updatedAt: new Date().toISOString()
-      });
+      await updateDoc(userRef, updatePayload);
 
-      // Update admin security collection
+      // Manage /admins/{uid} collection for security rules lookup
       const adminRef = doc(db, 'admins', uid);
       if (role === 'admin') {
         await setDoc(adminRef, {
           uid,
           assignedAt: new Date().toISOString()
         });
+      } else {
+        await deleteDoc(adminRef).catch(() => {});
       }
 
     } catch (err) {
       console.warn("Firestore updateDoc fallback to local state:", err);
     }
 
-    // Update local state
+    // Immediate local state update for fast UI response
     setAllUsers(prev => prev.map(u => {
       if (u.uid === uid) {
-        return { ...u, role, status, permissions };
+        return { 
+          ...u, 
+          role, 
+          status, 
+          permissions,
+          ...(additionalData || {})
+        };
       }
       return u;
     }));
 
     if (userProfile?.uid === uid) {
-      setUserProfile(prev => prev ? { ...prev, role, status, permissions } : null);
+      setUserProfile(prev => prev ? { 
+        ...prev, 
+        role, 
+        status, 
+        permissions,
+        ...(additionalData || {})
+      } : null);
     }
+  };
+
+  // Create new user profile in Firestore
+  const createUserProfile = async (profileData: {
+    email: string;
+    displayName: string;
+    role: UserRole;
+    status: 'active' | 'pending' | 'disabled';
+    department?: string;
+    phone?: string;
+    permissions?: Partial<UserProfile['permissions']>;
+  }): Promise<string> => {
+    const uid = 'usr_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    const permissions = {
+      ...ROLE_DEFAULT_PERMISSIONS[profileData.role],
+      ...(profileData.permissions || {})
+    };
+
+    const newProfile: UserProfile = {
+      uid,
+      email: profileData.email.trim(),
+      displayName: profileData.displayName.trim(),
+      role: profileData.role,
+      status: profileData.status,
+      department: profileData.department || '',
+      phone: profileData.phone || '',
+      permissions,
+      createdAt: new Date().toISOString()
+    };
+
+    try {
+      await setDoc(doc(db, 'users', uid), newProfile);
+
+      if (profileData.role === 'admin') {
+        await setDoc(doc(db, 'admins', uid), {
+          uid,
+          email: profileData.email.trim(),
+          assignedAt: new Date().toISOString()
+        }).catch(() => {});
+      }
+    } catch (err) {
+      console.warn("Firestore user creation warning:", err);
+    }
+
+    setAllUsers(prev => [newProfile, ...prev]);
+    return uid;
+  };
+
+  // Delete user from Firestore
+  const deleteUserProfile = async (uid: string): Promise<void> => {
+    try {
+      await deleteDoc(doc(db, 'users', uid));
+      await deleteDoc(doc(db, 'admins', uid)).catch(() => {});
+    } catch (err) {
+      console.warn("Firestore user deletion warning:", err);
+    }
+
+    setAllUsers(prev => prev.filter(u => u.uid !== uid));
   };
 
   const activeRole: UserRole = simulatedRole || userProfile?.role || 'admin';
@@ -308,6 +402,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginAsDemoUser,
         logout,
         updateUserRoleAndPermissions,
+        createUserProfile,
+        deleteUserProfile,
         activeRole,
         isSimulatingRole: !!simulatedRole,
         setSimulatedRole: setSimulatedRoleState
