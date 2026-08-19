@@ -1,0 +1,171 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with role-based permissions in LCG Admin",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth user UID",
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address",
+          "maxLength": 256
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User full name",
+          "maxLength": 128
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "User avatar URL",
+          "maxLength": 512
+        },
+        "role": {
+          "type": "string",
+          "description": "Assigned role in the system",
+          "enum": ["admin", "gerente", "disenador", "produccion"]
+        },
+        "status": {
+          "type": "string",
+          "description": "Account status",
+          "enum": ["active", "pending", "disabled"]
+        },
+        "permissions": {
+          "type": "object",
+          "description": "Granular module privileges"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp ISO"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last update timestamp ISO"
+        }
+      },
+      "required": ["uid", "email", "role", "status"]
+    },
+    "AdminFlag": {
+      "title": "AdminFlag",
+      "description": "Security flag document verifying administrator status",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "assignedAt": {
+          "type": "string"
+        }
+      },
+      "required": ["uid", "email"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "Customer/Company directory record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 200 },
+        "contactPerson": { "type": "string", "maxLength": 200 },
+        "email": { "type": "string", "maxLength": 256 },
+        "phone": { "type": "string", "maxLength": 64 },
+        "rfc": { "type": "string", "maxLength": 32 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "tags": { "type": "array" },
+        "initials": { "type": "string", "maxLength": 8 }
+      },
+      "required": ["name", "contactPerson", "email"]
+    },
+    "Quote": {
+      "title": "Quote",
+      "description": "Commercial quote with line items and financial totals",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "code": { "type": "string", "maxLength": 64 },
+        "clientName": { "type": "string", "maxLength": 200 },
+        "contactEmail": { "type": "string", "maxLength": 256 },
+        "contactPhone": { "type": "string", "maxLength": 64 },
+        "subtotal": { "type": "number" },
+        "taxRate": { "type": "number" },
+        "taxAmount": { "type": "number" },
+        "total": { "type": "number" },
+        "status": { "type": "string", "maxLength": 32 },
+        "validityDays": { "type": "number" },
+        "commercialTerms": { "type": "string", "maxLength": 2000 }
+      },
+      "required": ["code", "clientName", "total"]
+    },
+    "ProductionJob": {
+      "title": "ProductionJob",
+      "description": "Production kanban job order",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "orderNumber": { "type": "string", "maxLength": 64 },
+        "clientName": { "type": "string", "maxLength": 200 },
+        "projectName": { "type": "string", "maxLength": 300 },
+        "category": { "type": "string", "maxLength": 64 },
+        "status": { "type": "string", "enum": ["por_aprobar", "preprensa", "impresion", "finalizado"] },
+        "progress": { "type": "number" },
+        "deliveryDate": { "type": "string", "maxLength": 64 },
+        "isUrgent": { "type": "boolean" }
+      },
+      "required": ["orderNumber", "clientName", "projectName", "status"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Print shop product catalog with base pricing, sustrates, and finishes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "sku": { "type": "string", "maxLength": 64 },
+        "name": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string", "maxLength": 64 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "unitPrice": { "type": "number" },
+        "unit": { "type": "string", "maxLength": 32 },
+        "minQuantity": { "type": "number" },
+        "paperStock": { "type": "string", "maxLength": 200 },
+        "active": { "type": "boolean" }
+      },
+      "required": ["sku", "name", "category", "unitPrice"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profiles and assigned role definitions"
+    },
+    "/admins/{userId}": {
+      "schema": "AdminFlag",
+      "description": "Trusted admin security lookup collection"
+    },
+    "/clients/{clientId}": {
+      "schema": "Client",
+      "description": "Client directory"
+    },
+    "/quotes/{quoteId}": {
+      "schema": "Quote",
+      "description": "Commercial quotations"
+    },
+    "/jobs/{jobId}": {
+      "schema": "ProductionJob",
+      "description": "Production jobs on Kanban board"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Products and services catalog"
+    }
+  }
+}
