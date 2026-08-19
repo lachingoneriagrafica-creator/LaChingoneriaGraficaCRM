@@ -26,6 +26,7 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { Product } from '../types';
+import { formatMXN } from '../utils/currencyUtils';
 
 interface ProductsViewProps {
   products: Product[];
@@ -294,7 +295,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
             </div>
             <div>
               <span className="text-[11px] text-[#a58a8e] block">Tarifa Promedio</span>
-              <span className="font-headline font-bold text-lg text-white">${avgPrice.toLocaleString()} <span className="text-[10px] text-[#a58a8e]">MXN</span></span>
+              <span className="font-headline font-bold text-lg text-white">{formatMXN(avgPrice)} <span className="text-[10px] text-[#a58a8e]">MXN</span></span>
             </div>
           </div>
 
@@ -490,7 +491,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                     <span className="text-[10px] text-[#a58a8e] uppercase block font-semibold">Tarifa Base:</span>
                     <div className="flex items-baseline gap-1">
                       <span className="font-headline font-bold text-lg text-white font-mono">
-                        ${product.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {formatMXN(product.unitPrice)}
                       </span>
                       <span className="text-xs text-[#a58a8e]">/ {product.unit}</span>
                     </div>
@@ -577,7 +578,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                         {product.paperStock || '—'}
                       </td>
                       <td className="p-3.5 text-right font-mono font-bold text-white">
-                        ${product.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {formatMXN(product.unitPrice)}
                         <span className="text-[10px] text-[#a58a8e] block font-normal">/ {product.unit}</span>
                       </td>
                       <td className="p-3.5 text-center font-mono text-[#debfc3]">

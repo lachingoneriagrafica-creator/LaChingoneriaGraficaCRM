@@ -20,6 +20,7 @@ import {
 import { NotificationItem, Client, ProductionJob, Quote, ViewType, UserRole } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { BrandLogo } from './BrandLogo';
+import { formatMXN } from '../utils/currencyUtils';
 
 interface TopNavbarProps {
   onOpenMobileMenu: () => void;
@@ -242,7 +243,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                         <div>
                           <span className="font-mono text-[#ffb1bf] font-semibold">{quote.code}</span>
                           <span className="text-white ml-2">{quote.clientName}</span>
-                          <span className="text-emerald-400 font-mono ml-2 font-bold">${quote.total.toLocaleString()} MXN</span>
+                          <span className="text-emerald-400 font-mono ml-2 font-bold">{formatMXN(quote.total)} MXN</span>
                         </div>
                         <span className="text-[10px] text-[#ff9aaf] opacity-0 group-hover:opacity-100 flex items-center gap-1">
                           Abrir cotizador <ArrowRight className="w-3 h-3" />

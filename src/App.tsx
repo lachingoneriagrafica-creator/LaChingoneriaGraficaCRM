@@ -28,6 +28,7 @@ import { QuoterView } from './components/QuoterView';
 import { KanbanView } from './components/KanbanView';
 import { CRMView } from './components/CRMView';
 import { ProductsView } from './components/ProductsView';
+import { formatMXN } from './utils/currencyUtils';
 import { PdfExportModal } from './components/PdfExportModal';
 import { SettingsModal } from './components/SettingsModal';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDocs } from 'firebase/firestore';
@@ -227,7 +228,7 @@ function MainAppShell() {
         type: 'quote_approved' as const,
         date: 'Hoy, ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         code: updatedQuote.code,
-        description: `Presupuesto de $${updatedQuote.total.toLocaleString()} MXN generado (${updatedQuote.items.length} partidas).`
+        description: `Presupuesto de ${formatMXN(updatedQuote.total)} MXN generado (${updatedQuote.items.length} partidas).`
       };
       setTimelineEvents(prev => ({
         ...prev,

@@ -2,6 +2,7 @@ import React from 'react';
 import { Printer, X, Download, FileCheck, Building2 } from 'lucide-react';
 import { Quote } from '../types';
 import { BrandLogo } from './BrandLogo';
+import { formatMXN } from '../utils/currencyUtils';
 
 interface PdfExportModalProps {
   quote: Quote | null;
@@ -114,10 +115,10 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                       {item.quantity.toLocaleString()}
                     </td>
                     <td className="p-3 text-right font-mono text-gray-800 align-top">
-                      ${item.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      {formatMXN(item.unitPrice)}
                     </td>
                     <td className="p-3 text-right font-mono font-bold text-gray-900 align-top">
-                      ${item.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      {formatMXN(item.total)}
                     </td>
                   </tr>
                 ))}
@@ -130,15 +131,15 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
             <div className="w-64 space-y-2 text-xs border-t border-gray-200 pt-3">
               <div className="flex justify-between text-gray-600">
                 <span>Subtotal:</span>
-                <span className="font-mono font-medium">${quote.subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                <span className="font-mono font-medium">{formatMXN(quote.subtotal)}</span>
               </div>
               <div className="flex justify-between text-gray-600">
                 <span>IVA (16%):</span>
-                <span className="font-mono font-medium">${quote.taxAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                <span className="font-mono font-medium">{formatMXN(quote.taxAmount)}</span>
               </div>
               <div className="flex justify-between text-base font-bold text-gray-900 border-t-2 border-gray-300 pt-2">
                 <span>Total (MXN):</span>
-                <span className="font-mono text-[#8d153e]">${quote.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                <span className="font-mono text-[#8d153e]">{formatMXN(quote.total)}</span>
               </div>
             </div>
           </div>

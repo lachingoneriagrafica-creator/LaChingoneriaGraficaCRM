@@ -25,6 +25,7 @@ import {
 import { Quote, Client, Product } from '../types';
 import { QuoteEditorModal } from './QuoteEditorModal';
 import { QuoteStatusDropdown } from './QuoteStatusDropdown';
+import { formatMXN } from '../utils/currencyUtils';
 
 interface QuoterViewProps {
   quotesList: Quote[];
@@ -210,7 +211,7 @@ export const QuoterView: React.FC<QuoterViewProps> = ({
             <div className="min-w-0">
               <div className="text-[11px] font-bold text-[#debfc3] uppercase tracking-wider">Total Presupuestado</div>
               <div className="text-lg font-headline font-bold text-white truncate">
-                ${totalAmount.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                {formatMXN(totalAmount)}
               </div>
               <div className="text-[10px] text-[#debfc3]">{totalQuotesCount} cotizaciones</div>
             </div>
@@ -224,7 +225,7 @@ export const QuoterView: React.FC<QuoterViewProps> = ({
             <div className="min-w-0">
               <div className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">Aprobadas</div>
               <div className="text-lg font-headline font-bold text-white truncate">
-                ${approvedTotal.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                {formatMXN(approvedTotal)}
               </div>
               <div className="text-[10px] text-emerald-400/80">{approvedQuotes.length} aceptadas</div>
             </div>
@@ -238,7 +239,7 @@ export const QuoterView: React.FC<QuoterViewProps> = ({
             <div className="min-w-0">
               <div className="text-[11px] font-bold text-sky-400 uppercase tracking-wider">Enviadas</div>
               <div className="text-lg font-headline font-bold text-white truncate">
-                ${sentTotal.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                {formatMXN(sentTotal)}
               </div>
               <div className="text-[10px] text-sky-400/80">{sentQuotes.length} en revisión</div>
             </div>
@@ -252,7 +253,7 @@ export const QuoterView: React.FC<QuoterViewProps> = ({
             <div className="min-w-0">
               <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wider">Borradores</div>
               <div className="text-lg font-headline font-bold text-white truncate">
-                ${draftTotal.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                {formatMXN(draftTotal)}
               </div>
               <div className="text-[10px] text-amber-400/80">{draftQuotes.length} pendientes</div>
             </div>
@@ -391,16 +392,16 @@ export const QuoterView: React.FC<QuoterViewProps> = ({
         ) : viewMode === 'table' ? (
           /* Table View */
           <div className="bg-[#191511] border border-white/5 rounded-2xl shadow-xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full min-w-[880px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-white/10 bg-[#201b16] text-[11px] font-bold text-[#debfc3] uppercase tracking-wider">
-                    <th className="py-3 px-4">Código / Fecha</th>
-                    <th className="py-3 px-4">Cliente</th>
-                    <th className="py-3 px-4">Partidas / Resumen</th>
-                    <th className="py-3 px-4 text-right">Total ($ MXN)</th>
-                    <th className="py-3 px-4 text-center">Estado</th>
-                    <th className="py-3 px-4 text-right">Acciones</th>
+                    <th className="py-3.5 px-4 w-[16%]">Código / Fecha</th>
+                    <th className="py-3.5 px-4 w-[20%]">Cliente</th>
+                    <th className="py-3.5 px-4 w-[24%]">Partidas / Resumen</th>
+                    <th className="py-3.5 px-4 w-[14%] text-right">Total ($ MXN)</th>
+                    <th className="py-3.5 px-4 w-[12%] text-center">Estado</th>
+                    <th className="py-3.5 px-4 w-[14%] min-w-[160px] text-right">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
@@ -417,7 +418,7 @@ export const QuoterView: React.FC<QuoterViewProps> = ({
                         onClick={() => handleOpenEditQuote(quote)}
                       >
                         {/* Code & Date */}
-                        <td className="py-3 px-4 align-middle">
+                        <td className="py-3.5 px-4 align-middle">
                           <div className="flex items-center gap-2">
                             <span className="font-mono font-bold text-sm text-[#ffb1bf]">
                               {quote.code}
@@ -441,7 +442,7 @@ export const QuoterView: React.FC<QuoterViewProps> = ({
                         </td>
 
                         {/* Client */}
-                        <td className="py-3 px-4 align-middle">
+                        <td className="py-3.5 px-4 align-middle">
                           <div className="font-semibold text-white text-xs">
                             {quote.clientName || 'Cliente General'}
                           </div>
@@ -453,7 +454,7 @@ export const QuoterView: React.FC<QuoterViewProps> = ({
                         </td>
 
                         {/* Items Preview */}
-                        <td className="py-3 px-4 align-middle">
+                        <td className="py-3.5 px-4 align-middle">
                           <div className="text-xs text-[#ebe1d9] truncate max-w-[260px]" title={itemsSummary}>
                             {itemsSummary}
                           </div>
@@ -463,17 +464,17 @@ export const QuoterView: React.FC<QuoterViewProps> = ({
                         </td>
 
                         {/* Total */}
-                        <td className="py-3 px-4 align-middle text-right font-mono">
+                        <td className="py-3.5 px-4 align-middle text-right font-mono">
                           <div className="font-bold text-sm text-white">
-                            ${quote.total.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {formatMXN(quote.total)}
                           </div>
                           <div className="text-[10px] text-[#8a7f76]">
-                            Subtotal: ${quote.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            Subtotal: {formatMXN(quote.subtotal)}
                           </div>
                         </td>
 
                         {/* Status Dropdown */}
-                        <td className="py-3 px-4 align-middle text-center" onClick={(e) => e.stopPropagation()}>
+                        <td className="py-3.5 px-4 align-middle text-center" onClick={(e) => e.stopPropagation()}>
                           <QuoteStatusDropdown
                             status={quote.status}
                             onChangeStatus={(newStatus) => onUpdateQuoteStatus(quote.id, newStatus)}
@@ -481,38 +482,38 @@ export const QuoterView: React.FC<QuoterViewProps> = ({
                         </td>
 
                         {/* Actions */}
-                        <td className="py-3 px-4 align-middle text-right" onClick={(e) => e.stopPropagation()}>
+                        <td className="py-3.5 px-4 align-middle text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               onClick={() => handleOpenEditQuote(quote)}
                               title="Editar Cotización"
-                              className="p-1.5 rounded-lg bg-[#241f1a] hover:bg-[#2e2924] text-[#debfc3] hover:text-[#ffb1bf] border border-white/10 transition-colors cursor-pointer"
+                              className="w-8 h-8 rounded-lg bg-[#241f1a] hover:bg-[#2e2924] text-[#debfc3] hover:text-[#ffb1bf] border border-white/10 flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 shadow-sm"
                             >
-                              <Edit3 className="w-3.5 h-3.5" />
+                              <Edit3 className="w-4 h-4" />
                             </button>
 
                             <button
                               onClick={() => onOpenPdfModal(quote)}
                               title="Exportar PDF"
-                              className="p-1.5 rounded-lg bg-[#241f1a] hover:bg-[#2e2924] text-[#debfc3] hover:text-white border border-white/10 transition-colors cursor-pointer"
+                              className="w-8 h-8 rounded-lg bg-[#241f1a] hover:bg-[#2e2924] text-[#debfc3] hover:text-white border border-white/10 flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 shadow-sm"
                             >
-                              <FileDown className="w-3.5 h-3.5" />
+                              <FileDown className="w-4 h-4" />
                             </button>
 
                             <button
                               onClick={() => onConvertToOrder(quote)}
                               title="Convertir a Orden de Producción"
-                              className="p-1.5 rounded-lg bg-purple-950/40 hover:bg-purple-900/60 text-purple-300 border border-purple-500/20 transition-colors cursor-pointer"
+                              className="w-8 h-8 rounded-lg bg-[#3b1236]/80 hover:bg-[#52194a] text-[#ff9aaf] border border-[#ffb1bf]/30 flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 shadow-sm"
                             >
-                              <CheckSquare className="w-3.5 h-3.5" />
+                              <CheckSquare className="w-4 h-4" />
                             </button>
 
                             <button
                               onClick={() => setQuoteToDelete(quote)}
                               title="Eliminar Cotización"
-                              className="p-1.5 rounded-lg bg-rose-950/20 hover:bg-rose-900/40 text-rose-300 border border-rose-500/20 transition-colors cursor-pointer"
+                              className="w-8 h-8 rounded-lg bg-[#3a1017]/80 hover:bg-[#541620] text-rose-300 border border-rose-500/40 flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 shadow-sm"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </td>
@@ -595,7 +596,7 @@ export const QuoterView: React.FC<QuoterViewProps> = ({
                     <div>
                       <div className="text-[10px] text-[#8a7f76] uppercase">Importe Total</div>
                       <div className="font-mono font-bold text-base text-white">
-                        ${quote.total.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {formatMXN(quote.total)}
                       </div>
                     </div>
 
@@ -603,23 +604,30 @@ export const QuoterView: React.FC<QuoterViewProps> = ({
                       <button
                         onClick={() => handleOpenEditQuote(quote)}
                         title="Editar"
-                        className="p-2 rounded-lg bg-[#241f1a] hover:bg-[#2e2924] text-[#debfc3] hover:text-[#ffb1bf] border border-white/10 transition-colors cursor-pointer"
+                        className="w-8 h-8 rounded-lg bg-[#241f1a] hover:bg-[#2e2924] text-[#debfc3] hover:text-[#ffb1bf] border border-white/10 flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 shadow-sm"
                       >
-                        <Edit3 className="w-3.5 h-3.5" />
+                        <Edit3 className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => onOpenPdfModal(quote)}
                         title="Exportar PDF"
-                        className="p-2 rounded-lg bg-[#241f1a] hover:bg-[#2e2924] text-[#debfc3] hover:text-white border border-white/10 transition-colors cursor-pointer"
+                        className="w-8 h-8 rounded-lg bg-[#241f1a] hover:bg-[#2e2924] text-[#debfc3] hover:text-white border border-white/10 flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 shadow-sm"
                       >
-                        <FileDown className="w-3.5 h-3.5" />
+                        <FileDown className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => onConvertToOrder(quote)}
+                        title="Convertir a Orden de Producción"
+                        className="w-8 h-8 rounded-lg bg-[#3b1236]/80 hover:bg-[#52194a] text-[#ff9aaf] border border-[#ffb1bf]/30 flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 shadow-sm"
+                      >
+                        <CheckSquare className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => setQuoteToDelete(quote)}
                         title="Eliminar"
-                        className="p-2 rounded-lg bg-rose-950/20 hover:bg-rose-900/40 text-rose-300 border border-rose-500/20 transition-colors cursor-pointer"
+                        className="w-8 h-8 rounded-lg bg-[#3a1017]/80 hover:bg-[#541620] text-rose-300 border border-rose-500/40 flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 shadow-sm"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
@@ -663,7 +671,7 @@ export const QuoterView: React.FC<QuoterViewProps> = ({
                 ¿Eliminar Cotización {quoteToDelete.code}?
               </h3>
               <p className="text-xs text-[#debfc3] mt-2">
-                Esta acción eliminará de forma permanente el presupuesto para <strong>{quoteToDelete.clientName}</strong> por un total de <strong>${quoteToDelete.total.toLocaleString()} MXN</strong>.
+                Esta acción eliminará de forma permanente el presupuesto para <strong>{quoteToDelete.clientName}</strong> por un total de <strong>{formatMXN(quoteToDelete.total)} MXN</strong>.
               </p>
             </div>
 

@@ -13,6 +13,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { Product, QuoteItem } from '../types';
+import { formatMXN } from '../utils/currencyUtils';
 
 interface ProductPickerModalProps {
   isOpen: boolean;
@@ -251,7 +252,7 @@ export const ProductPickerModal: React.FC<ProductPickerModalProps> = ({
                     <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-2 mt-1">
                       <div>
                         <div className="font-mono font-bold text-sm text-white">
-                          ${product.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {formatMXN(product.unitPrice)}
                           <span className="text-[10px] text-[#a58a8e] font-normal"> / {product.unit}</span>
                         </div>
                         <span className="text-[10px] text-[#a58a8e] block">

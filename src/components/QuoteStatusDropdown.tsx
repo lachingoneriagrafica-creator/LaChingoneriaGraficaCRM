@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Check } from 'lucide-react';
 import { Quote } from '../types';
 
@@ -14,17 +15,76 @@ export const QuoteStatusDropdown: React.FC<QuoteStatusDropdownProps> = ({
   size = 'sm'
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{ top: number; left: number; openUpwards: boolean }>({
+    top: 0,
+    left: 0,
+    openUpwards: false
+  });
+  
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const updatePosition = () => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const dropdownHeight = 220; // Estimated height with margins
+    const dropdownWidth = 192;  // w-48 is 192px
+
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUpwards = spaceBelow < dropdownHeight && rect.top > dropdownHeight;
+
+    // Align right side of menu with right side of button, but ensure it stays on screen
+    let left = rect.right - dropdownWidth;
+    if (left < 10) left = 10;
+    if (left + dropdownWidth > window.innerWidth - 10) {
+      left = window.innerWidth - dropdownWidth - 10;
+    }
+
+    const top = openUpwards 
+      ? rect.top - 6 
+      : rect.bottom + 6;
+
+    setCoords({
+      top,
+      left,
+      openUpwards
+    });
+  };
+
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isOpen) {
+      updatePosition();
+    }
+    setIsOpen(!isOpen);
+  };
 
   useEffect(() => {
+    if (!isOpen) return;
+
+    const handleScrollOrResize = () => {
+      updatePosition();
+    };
+
     const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      if (
+        menuRef.current && !menuRef.current.contains(e.target as Node) &&
+        buttonRef.current && !buttonRef.current.contains(e.target as Node)
+      ) {
         setIsOpen(false);
       }
     };
+
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+
+    return () => {
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
 
   const getStatusConfig = (st: Quote['status']) => {
     switch (st) {
@@ -74,15 +134,15 @@ export const QuoteStatusDropdown: React.FC<QuoteStatusDropdownProps> = ({
   };
 
   const current = getStatusConfig(status);
-
-  const statusOptions: Quote['status'][] = ['DRAFT', 'SENT', 'APPROVED', 'CONVERTED'];
+  const statusOptions: Quote['status'][] = ['DRAFT', 'SENT', 'APPROVED', 'CONVERTED', 'REJECTED'];
 
   return (
-    <div className="relative inline-block text-left" ref={dropdownRef} onClick={(e) => e.stopPropagation()}>
+    <div className="relative inline-block text-left" onClick={(e) => e.stopPropagation()}>
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className={`inline-flex items-center gap-1.5 font-semibold rounded-lg border transition-all cursor-pointer select-none ${
+        onClick={handleToggle}
+        className={`inline-flex items-center gap-1.5 font-semibold rounded-lg border transition-all cursor-pointer select-none shadow-sm ${
           size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3 py-1.5 text-xs'
         } ${current.badgeClass}`}
       >
@@ -91,37 +151,53 @@ export const QuoteStatusDropdown: React.FC<QuoteStatusDropdownProps> = ({
         <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
-      {isOpen && (
-        <div className="absolute right-0 mt-1 w-48 rounded-xl bg-[#201b16] border border-white/10 shadow-2xl z-30 py-1.5 animate-in fade-in zoom-in-95 duration-100">
-          <div className="px-3 py-1 text-[10px] uppercase font-bold tracking-wider text-[#debfc3] border-b border-white/5 mb-1">
-            Cambiar Estado
+      {isOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            top: coords.openUpwards ? undefined : `${coords.top}px`,
+            bottom: coords.openUpwards ? `${window.innerHeight - coords.top}px` : undefined,
+            left: `${coords.left}px`,
+            width: '192px',
+            zIndex: 99999,
+          }}
+          className="rounded-xl bg-[#201b16] border border-white/15 shadow-[0_10px_35px_rgba(0,0,0,0.85)] py-1.5 animate-in fade-in zoom-in-95 duration-100 backdrop-blur-md"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-3 py-1 text-[10px] uppercase font-bold tracking-wider text-[#debfc3] border-b border-white/10 mb-1 flex items-center justify-between">
+            <span>Cambiar Estado</span>
           </div>
-          {statusOptions.map((opt) => {
-            const cfg = getStatusConfig(opt);
-            const isSelected = status === opt;
-            return (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => {
-                  onChangeStatus(opt);
-                  setIsOpen(false);
-                }}
-                className={`w-full text-left px-3 py-2 flex items-center justify-between text-xs transition-colors cursor-pointer ${
-                  isSelected ? 'bg-white/5 text-white font-bold' : 'text-[#debfc3] hover:bg-white/[0.03] hover:text-white'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className={`w-2.5 h-2.5 rounded-full ${cfg.dotClass}`} />
-                  <div>
-                    <div className="font-semibold">{cfg.label}</div>
+
+          <div className="space-y-0.5 px-1">
+            {statusOptions.map((opt) => {
+              const cfg = getStatusConfig(opt);
+              const isSelected = status === opt;
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => {
+                    onChangeStatus(opt);
+                    setIsOpen(false);
+                  }}
+                  className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between text-xs transition-colors cursor-pointer ${
+                    isSelected 
+                      ? 'bg-[#8d153e]/30 text-white font-bold border border-[#ffb1bf]/30' 
+                      : 'text-[#debfc3] hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${cfg.dotClass}`} />
+                    <span className="font-medium">{cfg.label}</span>
                   </div>
-                </div>
-                {isSelected && <Check className="w-3.5 h-3.5 text-[#ffb1bf]" />}
-              </button>
-            );
-          })}
-        </div>
+                  {isSelected && <Check className="w-3.5 h-3.5 text-[#ffb1bf]" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

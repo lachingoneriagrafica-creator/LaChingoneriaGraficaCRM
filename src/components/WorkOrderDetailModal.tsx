@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { ProductionJob, ProductionStatus } from '../types';
 import { BrandLogo } from './BrandLogo';
+import { formatMXN } from '../utils/currencyUtils';
 
 interface WorkOrderDetailModalProps {
   job: ProductionJob | null;
@@ -442,7 +443,7 @@ export const WorkOrderDetailModal: React.FC<WorkOrderDetailModalProps> = ({
                   <div className="bg-[#241e18] p-2.5 rounded-lg border border-white/5">
                     <span className="text-[#a58a8e] text-[10px] block">Monto Producción:</span>
                     <span className="font-mono font-bold text-emerald-400 mt-0.5 block">
-                      ${(job.totalAmount || 8500).toLocaleString()} MXN
+                      {formatMXN(job.totalAmount || 8500)} MXN
                     </span>
                   </div>
                 </div>

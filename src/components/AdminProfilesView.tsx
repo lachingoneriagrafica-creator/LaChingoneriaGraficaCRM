@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Shield, 
   ShieldCheck, 
@@ -9,26 +9,25 @@ import {
   Edit3, 
   Plus, 
   CheckCircle2, 
-  XCircle, 
   X, 
   Lock, 
-  Save, 
   AlertCircle, 
-  Key,
-  Search,
-  Eye,
-  Trash2,
-  Phone,
-  Mail,
-  UserCheck,
-  Building,
-  RefreshCw,
-  Sparkles,
-  Layers,
-  Database
+  Search, 
+  Eye, 
+  EyeOff,
+  Trash2, 
+  Phone, 
+  Database,
+  Camera,
+  Image as ImageIcon,
+  KeyRound,
+  Info,
+  UploadCloud,
+  Check
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { UserProfile, UserRole, ROLE_DEFAULT_PERMISSIONS, UserPermissions } from '../types';
+import { processAvatarImage } from '../utils/imageUtils';
 
 export const AdminProfilesView: React.FC = () => {
   const { 
@@ -36,11 +35,11 @@ export const AdminProfilesView: React.FC = () => {
     userProfile,
     allUsers, 
     updateUserRoleAndPermissions, 
+    updateUserProfilePhoto,
     createUserProfile,
     deleteUserProfile,
     activeRole, 
-    setSimulatedRole, 
-    isSimulatingRole 
+    setSimulatedRole 
   } = useAuth();
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -57,15 +56,25 @@ export const AdminProfilesView: React.FC = () => {
   const [formPhone, setFormPhone] = useState('');
   const [formRole, setFormRole] = useState<UserRole>('gerente');
   const [formStatus, setFormStatus] = useState<'active' | 'pending' | 'disabled'>('active');
+  const [formPhotoURL, setFormPhotoURL] = useState<string>('');
   const [formPermissions, setFormPermissions] = useState<UserPermissions>(ROLE_DEFAULT_PERMISSIONS.gerente);
 
   // Form state for creating new user
   const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDepartment, setNewDepartment] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newRole, setNewRole] = useState<UserRole>('gerente');
   const [newStatus, setNewStatus] = useState<'active' | 'pending' | 'disabled'>('active');
+  const [newPhotoURL, setNewPhotoURL] = useState<string>('');
+  const [newPermissions, setNewPermissions] = useState<UserPermissions>(ROLE_DEFAULT_PERMISSIONS.gerente);
+
+  // File input refs for uploading photos
+  const addFileInputRef = useRef<HTMLInputElement>(null);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
+  const myPhotoInputRef = useRef<HTMLInputElement>(null);
 
   // Stats calculation
   const totalUsers = allUsers.length;
@@ -92,7 +101,7 @@ export const AdminProfilesView: React.FC = () => {
     setFeedbackMsg({ text, type });
     setTimeout(() => {
       setFeedbackMsg(null);
-    }, 3500);
+    }, 4000);
   };
 
   const handleOpenEdit = (user: UserProfile) => {
@@ -102,6 +111,7 @@ export const AdminProfilesView: React.FC = () => {
     setFormPhone(user.phone || '');
     setFormRole(user.role);
     setFormStatus(user.status);
+    setFormPhotoURL(user.photoURL || '');
     setFormPermissions({
       ...ROLE_DEFAULT_PERMISSIONS[user.role],
       ...(user.permissions || {})
@@ -110,8 +120,12 @@ export const AdminProfilesView: React.FC = () => {
 
   const handleRoleChangeInForm = (role: UserRole) => {
     setFormRole(role);
-    // Pre-populate with recommended defaults for that role
     setFormPermissions(ROLE_DEFAULT_PERMISSIONS[role]);
+  };
+
+  const handleNewRoleChange = (role: UserRole) => {
+    setNewRole(role);
+    setNewPermissions(ROLE_DEFAULT_PERMISSIONS[role]);
   };
 
   const handlePermissionToggle = (key: keyof UserPermissions) => {
@@ -119,6 +133,48 @@ export const AdminProfilesView: React.FC = () => {
       ...prev,
       [key]: !prev[key]
     }));
+  };
+
+  const handleNewPermissionToggle = (key: keyof UserPermissions) => {
+    setNewPermissions(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  // Generate random strong password
+  const generateRandomPassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%&*';
+    let generated = '';
+    for (let i = 0; i < 10; i++) {
+      generated += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setNewPassword(generated);
+    setShowNewPassword(true);
+  };
+
+  // Handle photo file selection and optimization
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>, target: 'new' | 'edit' | 'me') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const optimizedDataUrl = await processAvatarImage(file);
+      if (target === 'new') {
+        setNewPhotoURL(optimizedDataUrl);
+      } else if (target === 'edit') {
+        setFormPhotoURL(optimizedDataUrl);
+      } else if (target === 'me' && userProfile) {
+        setIsSaving(true);
+        await updateUserProfilePhoto(userProfile.uid, optimizedDataUrl);
+        showNotification('Tu foto de perfil ha sido actualizada en Firebase Firestore.');
+      }
+    } catch (err: any) {
+      showNotification(err?.message || 'Error al procesar la imagen seleccionada.', 'error');
+    } finally {
+      if (e.target) e.target.value = '';
+      setIsSaving(false);
+    }
   };
 
   const handleSavePrivileges = async (e: React.FormEvent) => {
@@ -135,13 +191,14 @@ export const AdminProfilesView: React.FC = () => {
         {
           displayName: formDisplayName.trim(),
           department: formDepartment.trim(),
-          phone: formPhone.trim()
+          phone: formPhone.trim(),
+          photoURL: formPhotoURL || undefined
         }
       );
-      showNotification(`Privilegios actualizados exitosamente en Firebase para ${formDisplayName || editingUser.email}`);
+      showNotification(`Privilegios y perfil de ${formDisplayName || editingUser.email} actualizados exitosamente en Firebase.`);
       setEditingUser(null);
     } catch (err: any) {
-      showNotification(err?.message || 'Error al guardar los privilegios en Firebase', 'error');
+      showNotification(err?.message || 'Error al guardar los privilegios en Firebase.', 'error');
     } finally {
       setIsSaving(false);
     }
@@ -151,27 +208,36 @@ export const AdminProfilesView: React.FC = () => {
     e.preventDefault();
     if (!newEmail.trim() || !newName.trim()) return;
 
+    if (newPassword && newPassword.length < 6) {
+      showNotification('La contraseña debe contener al menos 6 caracteres.', 'error');
+      return;
+    }
+
     setIsSaving(true);
     try {
       await createUserProfile({
         email: newEmail.trim(),
+        password: newPassword.trim() || undefined,
         displayName: newName.trim(),
         role: newRole,
         status: newStatus,
         department: newDepartment.trim(),
         phone: newPhone.trim(),
-        permissions: ROLE_DEFAULT_PERMISSIONS[newRole]
+        photoURL: newPhotoURL || undefined,
+        permissions: newPermissions
       });
 
-      showNotification(`Usuario registrado en Firestore con rol de ${newRole.toUpperCase()}`);
+      showNotification(`Cuenta creada exitosamente en Firebase para ${newName.trim()} con rol ${newRole.toUpperCase()}.`);
       setShowAddModal(false);
       setNewEmail('');
+      setNewPassword('');
       setNewName('');
       setNewDepartment('');
       setNewPhone('');
+      setNewPhotoURL('');
       setNewRole('gerente');
     } catch (err: any) {
-      showNotification(err?.message || 'Error al registrar usuario en Firestore', 'error');
+      showNotification(err?.message || 'Error al crear la cuenta en Firebase.', 'error');
     } finally {
       setIsSaving(false);
     }
@@ -182,10 +248,10 @@ export const AdminProfilesView: React.FC = () => {
     setIsSaving(true);
     try {
       await deleteUserProfile(deletingUser.uid);
-      showNotification(`Usuario ${deletingUser.displayName} eliminado de Firestore`);
+      showNotification(`Usuario ${deletingUser.displayName || deletingUser.email} revocado y eliminado de Firebase.`);
       setDeletingUser(null);
     } catch (err: any) {
-      showNotification('Error al eliminar usuario de Firestore', 'error');
+      showNotification('Error al eliminar usuario de Firestore.', 'error');
     } finally {
       setIsSaving(false);
     }
@@ -196,7 +262,7 @@ export const AdminProfilesView: React.FC = () => {
       case 'admin':
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#8d153e]/20 text-[#ffb1bf] border border-[#ffb1bf]/30 text-xs font-semibold">
-            <ShieldCheck className="w-3.5 h-3.5" /> Administrador
+            <ShieldCheck className="w-3.5 h-3.5" /> Super Administrador
           </span>
         );
       case 'gerente':
@@ -240,23 +306,21 @@ export const AdminProfilesView: React.FC = () => {
       )}
 
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#17130e] p-5 rounded-2xl border border-white/5">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-[#8d153e]/20 rounded-xl text-[#ffb1bf] border border-[#8d153e]/40">
-              <Shield className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="font-headline font-bold text-xl sm:text-2xl text-[#ebe1d9]">
-                Gestión de Accesos y Privilegios
-              </h1>
-              <p className="text-xs text-[#debfc3] mt-0.5 flex items-center gap-2">
-                <span>Base de datos en tiempo real de Firebase Firestore</span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-mono font-semibold border border-emerald-500/20">
-                  <Database className="w-3 h-3" /> Firestore Sincronizado
-                </span>
-              </p>
-            </div>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#17130e] p-5 rounded-2xl border border-white/5 shadow-md">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-[#8d153e]/20 rounded-xl text-[#ffb1bf] border border-[#8d153e]/40">
+            <Shield className="w-6 h-6" />
+          </div>
+          <div>
+            <h1 className="font-headline font-bold text-xl sm:text-2xl text-[#ebe1d9]">
+              Gestión de Accesos & Cuentas de Personal
+            </h1>
+            <p className="text-xs text-[#debfc3] mt-0.5 flex items-center gap-2">
+              <span>Control centralizado exclusivo para Super Administradores</span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-mono font-semibold border border-emerald-500/20">
+                <Database className="w-3 h-3" /> Firestore & Auth Sincronizados
+              </span>
+            </p>
           </div>
         </div>
 
@@ -264,7 +328,7 @@ export const AdminProfilesView: React.FC = () => {
           {/* Quick role preview switcher for testing */}
           <div className="flex items-center gap-2 bg-[#241f1a] border border-white/10 px-3 py-2 rounded-xl text-xs">
             <Eye className="w-3.5 h-3.5 text-[#ffb1bf]" />
-            <span className="text-[#a58a8e]">Simular Rol:</span>
+            <span className="text-[#a58a8e]">Simular Vista:</span>
             <select
               value={activeRole}
               onChange={(e) => setSimulatedRole(e.target.value as UserRole)}
@@ -278,13 +342,70 @@ export const AdminProfilesView: React.FC = () => {
           </div>
 
           <button
-            onClick={() => setShowAddModal(true)}
-            className="bg-[#8d153e] hover:bg-[#a61c4b] text-white font-headline text-xs font-semibold py-2.5 px-4 rounded-xl flex items-center gap-2 shadow-md transition-all cursor-pointer"
+            onClick={() => {
+              setNewPhotoURL('');
+              setNewPassword('');
+              setNewPermissions(ROLE_DEFAULT_PERMISSIONS[newRole]);
+              setShowAddModal(true);
+            }}
+            className="bg-[#8d153e] hover:bg-[#a61c4b] text-white font-headline text-xs font-semibold py-2.5 px-4 rounded-xl flex items-center gap-2 shadow-md transition-all cursor-pointer hover:scale-[1.01]"
           >
             <Plus className="w-4 h-4 text-[#ff9aaf]" />
-            <span>Asignar Nuevo Usuario</span>
+            <span>Crear Nueva Cuenta de Usuario</span>
           </button>
         </div>
+      </div>
+
+      {/* Info Card: Storage Architecture */}
+      <div className="bg-[#1f1b16] border border-[#ffb1bf]/15 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="p-2.5 bg-[#8d153e]/20 text-[#ffb1bf] rounded-xl shrink-0 mt-0.5">
+            <ImageIcon className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-[#ebe1d9] flex items-center gap-2">
+              <span>Almacenamiento de Fotografías de Perfil en la Base de Datos</span>
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-mono px-2 py-0.5 rounded-full border border-emerald-500/30">
+                Optimización WebP Directa
+              </span>
+            </h3>
+            <p className="text-xs text-[#a58a8e] mt-1 leading-relaxed max-w-4xl">
+              Las fotografías se procesan y optimizan automáticamente en formato WebP ligero (~15 KB) y se guardan directamente en el campo <code className="text-[#ffb1bf] bg-[#2a2723] px-1 py-0.5 rounded">photoURL</code> del documento de cada usuario en <strong>Firebase Firestore</strong>. Esto garantiza sincronización instantánea en todos los dispositivos sin necesidad de subir archivos manuales a GitHub.
+            </p>
+          </div>
+        </div>
+
+        {/* Quick change photo for currently logged user */}
+        {userProfile && (
+          <div className="shrink-0 flex items-center gap-2 bg-[#2a2723] p-2 rounded-xl border border-white/5">
+            <input 
+              type="file" 
+              ref={myPhotoInputRef}
+              accept="image/*" 
+              className="hidden" 
+              onChange={(e) => handlePhotoSelect(e, 'me')}
+            />
+            <div className="relative group cursor-pointer" onClick={() => myPhotoInputRef.current?.click()}>
+              <img 
+                src={userProfile.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(userProfile.displayName || userProfile.email)}&background=8d153e&color=ffb1bf`}
+                alt="Tu foto" 
+                className="w-10 h-10 rounded-full object-cover border-2 border-[#ffb1bf]/40 group-hover:opacity-75 transition-opacity"
+              />
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                <Camera className="w-4 h-4 text-white" />
+              </div>
+            </div>
+            <div className="text-left pr-2">
+              <p className="text-[11px] font-semibold text-[#ebe1d9]">Tu Foto de Perfil</p>
+              <button
+                onClick={() => myPhotoInputRef.current?.click()}
+                className="text-[10px] text-[#ffb1bf] hover:underline cursor-pointer block"
+              >
+                Cambiar fotografía
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Role Summary Bento Cards */}
@@ -305,7 +426,7 @@ export const AdminProfilesView: React.FC = () => {
             <ShieldCheck className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-[11px] text-[#ffb1bf] uppercase font-semibold">Admins</p>
+            <p className="text-[11px] text-[#ffb1bf] uppercase font-semibold">Super Admins</p>
             <h3 className="font-headline font-bold text-xl text-[#ebe1d9]">{adminCount}</h3>
             <p className="text-[10px] text-[#a58a8e]">Acceso Maestro</p>
           </div>
@@ -354,7 +475,7 @@ export const AdminProfilesView: React.FC = () => {
             <Search className="w-4 h-4 text-[#a58a8e]" />
             <input
               type="text"
-              placeholder="Buscar por nombre, correo o área..."
+              placeholder="Buscar por nombre, correo o departamento..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="bg-transparent border-none text-xs text-[#ebe1d9] placeholder-[#a58a8e] w-full outline-none"
@@ -369,9 +490,9 @@ export const AdminProfilesView: React.FC = () => {
               className="bg-[#17130e] border border-white/10 text-xs text-[#ebe1d9] rounded-lg px-3 py-1.5 outline-none"
             >
               <option value="ALL">Todos los roles ({totalUsers})</option>
-              <option value="admin">Administrador</option>
+              <option value="admin">Super Administrador</option>
               <option value="gerente">Ventas / Gerente</option>
-              <option value="disenador">Diseñador</option>
+              <option value="disenador">Diseñador Pre-prensa</option>
               <option value="produccion">Taller / Producción</option>
             </select>
           </div>
@@ -379,10 +500,10 @@ export const AdminProfilesView: React.FC = () => {
 
         {/* Users Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[850px]">
+          <table className="w-full text-left border-collapse min-w-[880px]">
             <thead>
               <tr className="border-b border-white/5 bg-[#17130e] text-[#debfc3] text-xs uppercase font-semibold">
-                <th className="py-3.5 px-5">Usuario / Email</th>
+                <th className="py-3.5 px-5">Foto / Colaborador</th>
                 <th className="py-3.5 px-5">Rol en Firebase</th>
                 <th className="py-3.5 px-5">Departamento</th>
                 <th className="py-3.5 px-5">Estado</th>
@@ -393,8 +514,8 @@ export const AdminProfilesView: React.FC = () => {
             <tbody className="divide-y divide-white/5 text-xs">
               {filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-10 text-center text-[#a58a8e]">
-                    No se encontraron usuarios registrados que coincidan con la búsqueda.
+                  <td colSpan={6} className="py-12 text-center text-[#a58a8e]">
+                    No se encontraron usuarios registrados en la base de datos.
                   </td>
                 </tr>
               ) : (
@@ -408,7 +529,7 @@ export const AdminProfilesView: React.FC = () => {
                           <img
                             src={user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || user.email)}&background=8d153e&color=ffb1bf`}
                             alt={user.displayName}
-                            className="w-10 h-10 rounded-full object-cover border border-white/10 shrink-0"
+                            className="w-11 h-11 rounded-full object-cover border border-white/15 shrink-0 bg-[#2a2723]"
                           />
                           <div>
                             <div className="flex items-center gap-2">
@@ -449,45 +570,49 @@ export const AdminProfilesView: React.FC = () => {
                         </span>
                       </td>
                       <td className="py-4 px-5">
-                        <div className="flex gap-1.5 flex-wrap max-w-xs">
-                          {user.permissions?.canManageUsers && (
-                            <span className="px-1.5 py-0.5 bg-[#8d153e]/20 text-[#ffb1bf] rounded text-[9px] font-semibold border border-[#ffb1bf]/20">Usuarios</span>
-                          )}
+                        <div className="flex flex-wrap gap-1 max-w-xs">
                           {user.permissions?.canCreateQuotes && (
-                            <span className="px-1.5 py-0.5 bg-amber-400/10 text-amber-300 rounded text-[9px] font-semibold border border-amber-400/20">Cotizador</span>
+                            <span className="px-2 py-0.5 bg-white/5 text-[#ebe1d9] rounded text-[10px] border border-white/5">
+                              Cotizar
+                            </span>
                           )}
                           {user.permissions?.canManageClients && (
-                            <span className="px-1.5 py-0.5 bg-blue-400/10 text-blue-300 rounded text-[9px] font-semibold border border-blue-400/20">CRM</span>
+                            <span className="px-2 py-0.5 bg-white/5 text-[#ebe1d9] rounded text-[10px] border border-white/5">
+                              Clientes
+                            </span>
                           )}
                           {user.permissions?.canManageProduction && (
-                            <span className="px-1.5 py-0.5 bg-emerald-400/10 text-emerald-300 rounded text-[9px] font-semibold border border-emerald-400/20">Kanban</span>
+                            <span className="px-2 py-0.5 bg-white/5 text-[#ebe1d9] rounded text-[10px] border border-white/5">
+                              Taller / Kanban
+                            </span>
                           )}
                           {user.permissions?.canViewFinancials && (
-                            <span className="px-1.5 py-0.5 bg-purple-400/10 text-purple-300 rounded text-[9px] font-semibold border border-purple-400/20">Costos</span>
+                            <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-300 rounded text-[10px] border border-emerald-500/20">
+                              Costos / Utilidad
+                            </span>
                           )}
-                          {user.permissions?.canDeleteRecords && (
-                            <span className="px-1.5 py-0.5 bg-red-400/10 text-red-300 rounded text-[9px] font-semibold border border-red-400/20">Eliminar</span>
-                          )}
-                          {user.permissions?.canEditSettings && (
-                            <span className="px-1.5 py-0.5 bg-zinc-700/50 text-zinc-300 rounded text-[9px] font-semibold">Config</span>
+                          {user.permissions?.canManageUsers && (
+                            <span className="px-2 py-0.5 bg-[#8d153e]/20 text-[#ffb1bf] rounded text-[10px] border border-[#8d153e]/30">
+                              Gestión Usuarios
+                            </span>
                           )}
                         </div>
                       </td>
                       <td className="py-4 px-5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                        <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => handleOpenEdit(user)}
-                            className="px-3 py-1.5 rounded-lg bg-[#2e2924] hover:bg-[#8d153e] text-[#ebe1d9] hover:text-white font-semibold transition-all cursor-pointer flex items-center gap-1.5 border border-white/5"
-                            title="Modificar rol y privilegios"
+                            className="px-3 py-1.5 bg-[#2a2723] hover:bg-[#8d153e] text-[#ebe1d9] hover:text-white rounded-lg border border-white/10 transition-colors flex items-center gap-1.5 cursor-pointer font-medium"
+                            title="Modificar privilegios y foto"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
-                            <span>Privilegios</span>
+                            <span>Editar</span>
                           </button>
                           
                           {!isCurrentAuthUser && (
                             <button
                               onClick={() => setDeletingUser(user)}
-                              className="p-1.5 rounded-lg bg-red-950/20 hover:bg-red-900/50 text-red-400 border border-red-500/20 transition-all cursor-pointer"
+                              className="p-1.5 bg-[#2a2723] hover:bg-red-500/20 text-[#a58a8e] hover:text-red-400 rounded-lg border border-white/10 transition-colors cursor-pointer"
                               title="Revocar acceso y eliminar"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -504,324 +629,90 @@ export const AdminProfilesView: React.FC = () => {
         </div>
       </div>
 
-      {/* Modal: Edit Privileges & Role Drawer */}
-      {editingUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div 
-            className="absolute inset-0 bg-black/85 backdrop-blur-xs"
-            onClick={() => !isSaving && setEditingUser(null)}
-          />
-
-          <div className="relative w-full max-w-2xl bg-[#1f1b16] border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-10 animate-in zoom-in-95 duration-200">
-            
-            {/* Header */}
-            <div className="p-5 border-b border-white/5 bg-[#17130e] flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-[#8d153e]/20 rounded-lg text-[#ffb1bf]">
-                  <Key className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-headline font-bold text-lg text-[#ebe1d9]">
-                    Asignar Rol y Privilegios en Firebase
-                  </h3>
-                  <p className="text-xs text-[#a58a8e]">
-                    {editingUser.displayName || editingUser.email} &bull; <span className="font-mono">{editingUser.email}</span>
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setEditingUser(null)}
-                disabled={isSaving}
-                className="text-[#debfc3] hover:text-white p-1.5 rounded-lg hover:bg-[#2e2924] cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Body */}
-            <form onSubmit={handleSavePrivileges} className="p-6 space-y-6 max-h-[75vh] overflow-y-auto custom-scrollbar text-xs">
-              
-              {/* User Identity Details */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-[#17130e] p-4 rounded-xl border border-white/5">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-[#debfc3]">Nombre en Sistema</label>
-                  <input
-                    type="text"
-                    value={formDisplayName}
-                    onChange={(e) => setFormDisplayName(e.target.value)}
-                    placeholder="Ej. Juan Pérez"
-                    className="w-full bg-[#241f1a] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-[#ebe1d9] outline-none"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-[#debfc3]">Departamento / Puesto</label>
-                  <input
-                    type="text"
-                    value={formDepartment}
-                    onChange={(e) => setFormDepartment(e.target.value)}
-                    placeholder="Ej. Impresión Offset"
-                    className="w-full bg-[#241f1a] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-[#ebe1d9] outline-none"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-[#debfc3]">Teléfono / Extensión</label>
-                  <input
-                    type="text"
-                    value={formPhone}
-                    onChange={(e) => setFormPhone(e.target.value)}
-                    placeholder="Ej. 55 1234 5678"
-                    className="w-full bg-[#241f1a] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-[#ebe1d9] outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* 1. Role Selection Cards */}
-              <div>
-                <div className="flex items-center justify-between mb-2.5">
-                  <label className="block font-headline font-semibold text-xs text-[#debfc3] uppercase tracking-wider">
-                    1. Rol Principal de Firebase
-                  </label>
-                  <span className="text-[11px] text-[#a58a8e]">Aplica permisos recomendados</span>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                  <div
-                    onClick={() => handleRoleChangeInForm('admin')}
-                    className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                      formRole === 'admin' 
-                        ? 'bg-[#8d153e]/30 border-[#ffb1bf] shadow-md ring-1 ring-[#ffb1bf]' 
-                        : 'bg-[#17130e] border-white/5 hover:border-white/20'
-                    }`}
-                  >
-                    <ShieldCheck className="w-5 h-5 text-[#ffb1bf] mb-1" />
-                    <p className="font-semibold text-xs text-[#ebe1d9]">Administrador</p>
-                    <p className="text-[10px] text-[#a58a8e] mt-0.5">Control Total</p>
-                  </div>
-
-                  <div
-                    onClick={() => handleRoleChangeInForm('gerente')}
-                    className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                      formRole === 'gerente' 
-                        ? 'bg-amber-500/20 border-amber-400 shadow-md ring-1 ring-amber-400' 
-                        : 'bg-[#17130e] border-white/5 hover:border-white/20'
-                    }`}
-                  >
-                    <Briefcase className="w-5 h-5 text-amber-400 mb-1" />
-                    <p className="font-semibold text-xs text-[#ebe1d9]">Ventas / Gerente</p>
-                    <p className="text-[10px] text-[#a58a8e] mt-0.5">Cotizador & CRM</p>
-                  </div>
-
-                  <div
-                    onClick={() => handleRoleChangeInForm('disenador')}
-                    className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                      formRole === 'disenador' 
-                        ? 'bg-purple-500/20 border-purple-400 shadow-md ring-1 ring-purple-400' 
-                        : 'bg-[#17130e] border-white/5 hover:border-white/20'
-                    }`}
-                  >
-                    <Palette className="w-5 h-5 text-purple-400 mb-1" />
-                    <p className="font-semibold text-xs text-[#ebe1d9]">Diseñador</p>
-                    <p className="text-[10px] text-[#a58a8e] mt-0.5">Pre-prensa & CTP</p>
-                  </div>
-
-                  <div
-                    onClick={() => handleRoleChangeInForm('produccion')}
-                    className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                      formRole === 'produccion' 
-                        ? 'bg-emerald-500/20 border-emerald-400 shadow-md ring-1 ring-emerald-400' 
-                        : 'bg-[#17130e] border-white/5 hover:border-white/20'
-                    }`}
-                  >
-                    <Printer className="w-5 h-5 text-emerald-400 mb-1" />
-                    <p className="font-semibold text-xs text-[#ebe1d9]">Producción</p>
-                    <p className="text-[10px] text-[#a58a8e] mt-0.5">Taller & Acabados</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* 2. Granular Privileges Checkboxes */}
-              <div>
-                <label className="block font-headline font-semibold text-xs text-[#debfc3] uppercase tracking-wider mb-2.5">
-                  2. Privilegios de Acceso Específicos
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-[#17130e] p-4 rounded-xl border border-white/5">
-                  
-                  <label className="flex items-start gap-2.5 p-2.5 rounded-lg hover:bg-[#241f1a] cursor-pointer transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={formPermissions.canManageUsers}
-                      onChange={() => handlePermissionToggle('canManageUsers')}
-                      className="mt-0.5 rounded bg-[#2a2723] border-white/20 text-[#8d153e] focus:ring-0"
-                    />
-                    <div>
-                      <span className="font-semibold text-[#ebe1d9]">Gestión de Usuarios y Roles</span>
-                      <p className="text-[10px] text-[#a58a8e]">Asignar privilegios y registrar cuentas</p>
-                    </div>
-                  </label>
-
-                  <label className="flex items-start gap-2.5 p-2.5 rounded-lg hover:bg-[#241f1a] cursor-pointer transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={formPermissions.canCreateQuotes}
-                      onChange={() => handlePermissionToggle('canCreateQuotes')}
-                      className="mt-0.5 rounded bg-[#2a2723] border-white/20 text-[#8d153e] focus:ring-0"
-                    />
-                    <div>
-                      <span className="font-semibold text-[#ebe1d9]">Generar y Editar Cotizaciones</span>
-                      <p className="text-[10px] text-[#a58a8e]">Crear partidas CHIN-XXXX y exportar PDF</p>
-                    </div>
-                  </label>
-
-                  <label className="flex items-start gap-2.5 p-2.5 rounded-lg hover:bg-[#241f1a] cursor-pointer transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={formPermissions.canManageClients}
-                      onChange={() => handlePermissionToggle('canManageClients')}
-                      className="mt-0.5 rounded bg-[#2a2723] border-white/20 text-[#8d153e] focus:ring-0"
-                    />
-                    <div>
-                      <span className="font-semibold text-[#ebe1d9]">Directorio CRM de Clientes</span>
-                      <p className="text-[10px] text-[#a58a8e]">Crear, editar y consultar empresas y RFCs</p>
-                    </div>
-                  </label>
-
-                  <label className="flex items-start gap-2.5 p-2.5 rounded-lg hover:bg-[#241f1a] cursor-pointer transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={formPermissions.canManageProduction}
-                      onChange={() => handlePermissionToggle('canManageProduction')}
-                      className="mt-0.5 rounded bg-[#2a2723] border-white/20 text-[#8d153e] focus:ring-0"
-                    />
-                    <div>
-                      <span className="font-semibold text-[#ebe1d9]">Control de Tablero Kanban</span>
-                      <p className="text-[10px] text-[#a58a8e]">Avanzar estados de órdenes y órdenes de trabajo</p>
-                    </div>
-                  </label>
-
-                  <label className="flex items-start gap-2.5 p-2.5 rounded-lg hover:bg-[#241f1a] cursor-pointer transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={formPermissions.canViewFinancials}
-                      onChange={() => handlePermissionToggle('canViewFinancials')}
-                      className="mt-0.5 rounded bg-[#2a2723] border-white/20 text-[#8d153e] focus:ring-0"
-                    />
-                    <div>
-                      <span className="font-semibold text-[#ebe1d9]">Métricas Financieras y Costos</span>
-                      <p className="text-[10px] text-[#a58a8e]">Ver totales, preventas y márgenes de ganancia</p>
-                    </div>
-                  </label>
-
-                  <label className="flex items-start gap-2.5 p-2.5 rounded-lg hover:bg-[#241f1a] cursor-pointer transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={formPermissions.canDeleteRecords}
-                      onChange={() => handlePermissionToggle('canDeleteRecords')}
-                      className="mt-0.5 rounded bg-[#2a2723] border-white/20 text-[#8d153e] focus:ring-0"
-                    />
-                    <div>
-                      <span className="font-semibold text-[#ebe1d9]">Eliminación de Registros</span>
-                      <p className="text-[10px] text-[#a58a8e]">Borrar cotizaciones, trabajos o clientes</p>
-                    </div>
-                  </label>
-
-                  <label className="flex items-start gap-2.5 p-2.5 rounded-lg hover:bg-[#241f1a] cursor-pointer transition-colors col-span-1 sm:col-span-2">
-                    <input
-                      type="checkbox"
-                      checked={formPermissions.canEditSettings}
-                      onChange={() => handlePermissionToggle('canEditSettings')}
-                      className="mt-0.5 rounded bg-[#2a2723] border-white/20 text-[#8d153e] focus:ring-0"
-                    />
-                    <div>
-                      <span className="font-semibold text-[#ebe1d9]">Administración de Catálogo y Configuración</span>
-                      <p className="text-[10px] text-[#a58a8e]">Modificar precios de sustratos, máquinas y datos fiscales</p>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              {/* 3. Account Status Selector */}
-              <div>
-                <label className="block font-headline font-semibold text-xs text-[#debfc3] uppercase tracking-wider mb-2">
-                  3. Estado de la Cuenta en Firebase
-                </label>
-                <div className="flex gap-4 flex-wrap bg-[#17130e] p-3.5 rounded-xl border border-white/5">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="status"
-                      value="active"
-                      checked={formStatus === 'active'}
-                      onChange={() => setFormStatus('active')}
-                      className="text-[#8d153e]"
-                    />
-                    <span className="text-[#ebe1d9] font-medium">Activa (Acceso Autorizado)</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="status"
-                      value="pending"
-                      checked={formStatus === 'pending'}
-                      onChange={() => setFormStatus('pending')}
-                      className="text-[#8d153e]"
-                    />
-                    <span className="text-amber-300 font-medium">Pendiente de Aprobación</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="status"
-                      value="disabled"
-                      checked={formStatus === 'disabled'}
-                      onChange={() => setFormStatus('disabled')}
-                      className="text-[#8d153e]"
-                    />
-                    <span className="text-red-400 font-medium">Suspendida / Deshabilitada</span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
-                <button
-                  type="button"
-                  disabled={isSaving}
-                  onClick={() => setEditingUser(null)}
-                  className="px-4 py-2 rounded-lg font-semibold text-[#debfc3] hover:bg-[#2e2924] cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-5 py-2.5 rounded-lg bg-[#8d153e] hover:bg-[#a61c4b] text-white font-headline text-xs font-semibold shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>{isSaving ? 'Guardando en Firebase...' : 'Guardar Privilegios en Firebase'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: Add New Staff Member */}
+      {/* Modal: Add New Staff Member (SUPER ADMIN ONLY) */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div 
             className="absolute inset-0 bg-black/85 backdrop-blur-xs"
             onClick={() => !isSaving && setShowAddModal(false)}
           />
-          <div className="relative w-full max-w-md bg-[#1f1b16] border border-white/10 rounded-2xl shadow-2xl p-6 z-10 animate-in zoom-in-95 duration-200">
-            <h3 className="font-headline font-bold text-lg text-[#ebe1d9] mb-1 flex items-center gap-2">
-              <Users className="w-5 h-5 text-[#ffb1bf]" />
-              <span>Asignar Privilegios a Nuevo Usuario</span>
-            </h3>
-            <p className="text-xs text-[#a58a8e] mb-4">
-              Pre-registra la cuenta para que cuando el usuario inicie sesión con este correo, tenga sus permisos listos.
-            </p>
+          <div className="relative w-full max-w-lg bg-[#1f1b16] border border-white/10 rounded-2xl shadow-2xl p-6 z-10 animate-in zoom-in-95 duration-200 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-[#8d153e]/20 text-[#ffb1bf] rounded-lg">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-headline font-bold text-lg text-[#ebe1d9]">
+                    Crear Cuenta de Personal
+                  </h3>
+                  <p className="text-xs text-[#a58a8e]">
+                    Crea el acceso y credenciales en Firebase para un nuevo colaborador.
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowAddModal(false)}
+                disabled={isSaving}
+                className="text-[#a58a8e] hover:text-white p-1 rounded-lg hover:bg-white/5 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
             <form onSubmit={handleCreateUser} className="space-y-4 text-xs">
+              
+              {/* Photo Upload Section */}
+              <div className="bg-[#241f1a] p-3.5 rounded-xl border border-white/5 flex items-center gap-4">
+                <input 
+                  type="file" 
+                  ref={addFileInputRef}
+                  accept="image/*" 
+                  className="hidden" 
+                  onChange={(e) => handlePhotoSelect(e, 'new')}
+                />
+                <div 
+                  onClick={() => addFileInputRef.current?.click()}
+                  className="relative group cursor-pointer shrink-0"
+                >
+                  <img 
+                    src={newPhotoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(newName || 'Usuario')}&background=8d153e&color=ffb1bf`}
+                    alt="Foto de perfil" 
+                    className="w-16 h-16 rounded-full object-cover border-2 border-white/20 group-hover:border-[#ffb1bf] transition-colors"
+                  />
+                  <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Camera className="w-5 h-5 text-white" />
+                  </div>
+                </div>
+
+                <div className="flex-1">
+                  <p className="font-semibold text-sm text-[#ebe1d9]">Fotografía de Perfil</p>
+                  <p className="text-[11px] text-[#a58a8e] mt-0.5">
+                    Se optimiza y almacena en el documento del usuario en Firestore.
+                  </p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => addFileInputRef.current?.click()}
+                      className="px-2.5 py-1 bg-[#8d153e]/30 hover:bg-[#8d153e] text-[#ffb1bf] hover:text-white rounded-lg text-[11px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-[#ffb1bf]/20"
+                    >
+                      <UploadCloud className="w-3.5 h-3.5" />
+                      <span>{newPhotoURL ? 'Cambiar Foto' : 'Subir Fotografía'}</span>
+                    </button>
+                    {newPhotoURL && (
+                      <button
+                        type="button"
+                        onClick={() => setNewPhotoURL('')}
+                        className="px-2 py-1 bg-white/5 hover:bg-red-500/20 text-[#a58a8e] hover:text-red-300 rounded-lg text-[11px] transition-colors cursor-pointer"
+                      >
+                        Quitar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Name & Email Fields */}
               <div className="space-y-1">
                 <label className="font-semibold text-[#debfc3] uppercase">Nombre Completo *</label>
                 <input
@@ -829,7 +720,7 @@ export const AdminProfilesView: React.FC = () => {
                   required
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Ej. Lic. Mariana Soto"
+                  placeholder="Ej. Ing. Carlos Martínez"
                   className="w-full bg-[#2a2723] border border-white/10 rounded-lg px-3 py-2 text-sm text-[#ebe1d9] focus:border-[#ab2e53] outline-none"
                 />
               </div>
@@ -841,23 +732,62 @@ export const AdminProfilesView: React.FC = () => {
                   required
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
-                  placeholder="ejemplo@lachingoneria.mx"
+                  placeholder="carlos.martinez@lachingoneria.mx"
                   className="w-full bg-[#2a2723] border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-[#ebe1d9] focus:border-[#ab2e53] outline-none"
                 />
               </div>
 
+              {/* Initial Password Setup */}
+              <div className="space-y-1 bg-[#241f1a] p-3 rounded-xl border border-white/5">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-[#debfc3] uppercase flex items-center gap-1.5">
+                    <KeyRound className="w-3.5 h-3.5 text-[#ffb1bf]" />
+                    <span>Contraseña de Acceso *</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={generateRandomPassword}
+                    className="text-[11px] text-[#ffb1bf] hover:underline cursor-pointer font-medium"
+                  >
+                    Generar segura
+                  </button>
+                </div>
+                <div className="relative flex items-center mt-1">
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    required
+                    minLength={6}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Mínimo 6 caracteres"
+                    className="w-full bg-[#17130e] border border-white/10 rounded-lg pl-3 pr-10 py-2 text-xs font-mono text-[#ebe1d9] focus:border-[#ab2e53] outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-2.5 text-[#a58a8e] hover:text-white p-1 cursor-pointer"
+                  >
+                    {showNewPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <p className="text-[10px] text-[#a58a8e] mt-1">
+                  El colaborador utilizará esta contraseña para iniciar sesión en la aplicación.
+                </p>
+              </div>
+
+              {/* Role & Department */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="font-semibold text-[#debfc3] uppercase">Rol Inicial</label>
+                  <label className="font-semibold text-[#debfc3] uppercase">Rol en el Sistema</label>
                   <select
                     value={newRole}
-                    onChange={(e) => setNewRole(e.target.value as UserRole)}
+                    onChange={(e) => handleNewRoleChange(e.target.value as UserRole)}
                     className="w-full bg-[#2a2723] border border-white/10 rounded-lg px-3 py-2 text-xs text-[#ebe1d9] outline-none cursor-pointer"
                   >
                     <option value="gerente">Ventas / Gerente</option>
                     <option value="disenador">Diseñador / Pre-prensa</option>
                     <option value="produccion">Taller / Producción</option>
-                    <option value="admin">Administrador</option>
+                    <option value="admin">Super Administrador</option>
                   </select>
                 </div>
 
@@ -867,23 +797,103 @@ export const AdminProfilesView: React.FC = () => {
                     type="text"
                     value={newDepartment}
                     onChange={(e) => setNewDepartment(e.target.value)}
-                    placeholder="Ventas, Taller..."
+                    placeholder="Ej. Ventas Offset"
                     className="w-full bg-[#2a2723] border border-white/10 rounded-lg px-3 py-2 text-xs text-[#ebe1d9] outline-none"
                   />
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="font-semibold text-[#debfc3] uppercase">Teléfono / WhatsApp (Opcional)</label>
-                <input
-                  type="text"
-                  value={newPhone}
-                  onChange={(e) => setNewPhone(e.target.value)}
-                  placeholder="55 1234 5678"
-                  className="w-full bg-[#2a2723] border border-white/10 rounded-lg px-3 py-2 text-xs text-[#ebe1d9] outline-none"
-                />
+              {/* Phone & Status */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[#debfc3] uppercase">Teléfono / WhatsApp</label>
+                  <input
+                    type="text"
+                    value={newPhone}
+                    onChange={(e) => setNewPhone(e.target.value)}
+                    placeholder="55 1234 5678"
+                    className="w-full bg-[#2a2723] border border-white/10 rounded-lg px-3 py-2 text-xs text-[#ebe1d9] outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-[#debfc3] uppercase">Estado Inicial</label>
+                  <select
+                    value={newStatus}
+                    onChange={(e) => setNewStatus(e.target.value as any)}
+                    className="w-full bg-[#2a2723] border border-white/10 rounded-lg px-3 py-2 text-xs text-[#ebe1d9] outline-none cursor-pointer"
+                  >
+                    <option value="active">Activo (Acceso Inmediato)</option>
+                    <option value="pending">Pendiente de Aprobación</option>
+                    <option value="disabled">Deshabilitado / Inactivo</option>
+                  </select>
+                </div>
               </div>
 
+              {/* Privileges Checklist */}
+              <div className="space-y-2 pt-2 border-t border-white/10">
+                <label className="font-semibold text-[#debfc3] uppercase block">
+                  Permisos Específicos Asignados
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-[#241f1a] p-3 rounded-xl border border-white/5">
+                  <label className="flex items-center gap-2 text-[#ebe1d9] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newPermissions.canCreateQuotes}
+                      onChange={() => handleNewPermissionToggle('canCreateQuotes')}
+                      className="rounded accent-[#8d153e]"
+                    />
+                    <span>Crear y editar cotizaciones</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-[#ebe1d9] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newPermissions.canManageClients}
+                      onChange={() => handleNewPermissionToggle('canManageClients')}
+                      className="rounded accent-[#8d153e]"
+                    />
+                    <span>Gestionar cartera de clientes</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-[#ebe1d9] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newPermissions.canManageProduction}
+                      onChange={() => handleNewPermissionToggle('canManageProduction')}
+                      className="rounded accent-[#8d153e]"
+                    />
+                    <span>Avanzar órdenes en Kanban</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-[#ebe1d9] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newPermissions.canViewFinancials}
+                      onChange={() => handleNewPermissionToggle('canViewFinancials')}
+                      className="rounded accent-[#8d153e]"
+                    />
+                    <span>Ver costos y márgenes de utilidad</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-[#ebe1d9] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newPermissions.canDeleteRecords}
+                      onChange={() => handleNewPermissionToggle('canDeleteRecords')}
+                      className="rounded accent-[#8d153e]"
+                    />
+                    <span>Eliminar cotizaciones / órdenes</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-[#ebe1d9] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newPermissions.canManageUsers}
+                      onChange={() => handleNewPermissionToggle('canManageUsers')}
+                      className="rounded accent-[#8d153e]"
+                    />
+                    <span>Crear y administrar usuarios</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Submit Buttons */}
               <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
                 <button
                   type="button"
@@ -896,10 +906,244 @@ export const AdminProfilesView: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-4 py-2.5 bg-[#8d153e] hover:bg-[#a61c4b] text-white rounded-lg font-semibold shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2.5 bg-[#8d153e] hover:bg-[#a61c4b] text-white rounded-lg font-semibold shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>{isSaving ? 'Registrando...' : 'Registrar en Firestore'}</span>
+                  <span>{isSaving ? 'Creando en Firebase...' : 'Crear Cuenta y Guardar'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit User Privileges & Profile */}
+      {editingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-black/85 backdrop-blur-xs"
+            onClick={() => !isSaving && setEditingUser(null)}
+          />
+          <div className="relative w-full max-w-lg bg-[#1f1b16] border border-white/10 rounded-2xl shadow-2xl p-6 z-10 animate-in zoom-in-95 duration-200 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-[#8d153e]/20 text-[#ffb1bf] rounded-lg">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-headline font-bold text-lg text-[#ebe1d9]">
+                    Modificar Perfil & Privilegios
+                  </h3>
+                  <p className="text-xs text-[#a58a8e] font-mono">
+                    {editingUser.email}
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setEditingUser(null)}
+                disabled={isSaving}
+                className="text-[#a58a8e] hover:text-white p-1 rounded-lg hover:bg-white/5 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePrivileges} className="space-y-4 text-xs">
+              
+              {/* Photo Update Section in Edit Modal */}
+              <div className="bg-[#241f1a] p-3.5 rounded-xl border border-white/5 flex items-center gap-4">
+                <input 
+                  type="file" 
+                  ref={editFileInputRef}
+                  accept="image/*" 
+                  className="hidden" 
+                  onChange={(e) => handlePhotoSelect(e, 'edit')}
+                />
+                <div 
+                  onClick={() => editFileInputRef.current?.click()}
+                  className="relative group cursor-pointer shrink-0"
+                >
+                  <img 
+                    src={formPhotoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(formDisplayName || editingUser.email)}&background=8d153e&color=ffb1bf`}
+                    alt="Foto de perfil" 
+                    className="w-16 h-16 rounded-full object-cover border-2 border-white/20 group-hover:border-[#ffb1bf] transition-colors"
+                  />
+                  <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Camera className="w-5 h-5 text-white" />
+                  </div>
+                </div>
+
+                <div className="flex-1">
+                  <p className="font-semibold text-sm text-[#ebe1d9]">Fotografía de Perfil</p>
+                  <p className="text-[11px] text-[#a58a8e] mt-0.5">
+                    Almacenada en Firestore bajo el perfil del colaborador.
+                  </p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => editFileInputRef.current?.click()}
+                      className="px-2.5 py-1 bg-[#8d153e]/30 hover:bg-[#8d153e] text-[#ffb1bf] hover:text-white rounded-lg text-[11px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-[#ffb1bf]/20"
+                    >
+                      <UploadCloud className="w-3.5 h-3.5" />
+                      <span>Cambiar Fotografía</span>
+                    </button>
+                    {formPhotoURL && (
+                      <button
+                        type="button"
+                        onClick={() => setFormPhotoURL('')}
+                        className="px-2 py-1 bg-white/5 hover:bg-red-500/20 text-[#a58a8e] hover:text-red-300 rounded-lg text-[11px] transition-colors cursor-pointer"
+                      >
+                        Remover Foto
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Name & Role */}
+              <div className="space-y-1">
+                <label className="font-semibold text-[#debfc3] uppercase">Nombre Completo</label>
+                <input
+                  type="text"
+                  required
+                  value={formDisplayName}
+                  onChange={(e) => setFormDisplayName(e.target.value)}
+                  className="w-full bg-[#2a2723] border border-white/10 rounded-lg px-3 py-2 text-sm text-[#ebe1d9] focus:border-[#ab2e53] outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[#debfc3] uppercase">Rol Oficial</label>
+                  <select
+                    value={formRole}
+                    onChange={(e) => handleRoleChangeInForm(e.target.value as UserRole)}
+                    className="w-full bg-[#2a2723] border border-white/10 rounded-lg px-3 py-2 text-xs text-[#ebe1d9] outline-none cursor-pointer"
+                  >
+                    <option value="gerente">Ventas / Gerente</option>
+                    <option value="disenador">Diseñador / Pre-prensa</option>
+                    <option value="produccion">Taller / Producción</option>
+                    <option value="admin">Super Administrador</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-[#debfc3] uppercase">Estado de Cuenta</label>
+                  <select
+                    value={formStatus}
+                    onChange={(e) => setFormStatus(e.target.value as any)}
+                    className="w-full bg-[#2a2723] border border-white/10 rounded-lg px-3 py-2 text-xs text-[#ebe1d9] outline-none cursor-pointer"
+                  >
+                    <option value="active">Activo</option>
+                    <option value="pending">Pendiente</option>
+                    <option value="disabled">Deshabilitado</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Department & Phone */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-[#debfc3] uppercase">Departamento</label>
+                  <input
+                    type="text"
+                    value={formDepartment}
+                    onChange={(e) => setFormDepartment(e.target.value)}
+                    className="w-full bg-[#2a2723] border border-white/10 rounded-lg px-3 py-2 text-xs text-[#ebe1d9] outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-[#debfc3] uppercase">Teléfono</label>
+                  <input
+                    type="text"
+                    value={formPhone}
+                    onChange={(e) => setFormPhone(e.target.value)}
+                    className="w-full bg-[#2a2723] border border-white/10 rounded-lg px-3 py-2 text-xs text-[#ebe1d9] outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Privileges Checklist */}
+              <div className="space-y-2 pt-2 border-t border-white/10">
+                <label className="font-semibold text-[#debfc3] uppercase block">
+                  Permisos Granulares
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-[#241f1a] p-3 rounded-xl border border-white/5">
+                  <label className="flex items-center gap-2 text-[#ebe1d9] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formPermissions.canCreateQuotes}
+                      onChange={() => handlePermissionToggle('canCreateQuotes')}
+                      className="rounded accent-[#8d153e]"
+                    />
+                    <span>Crear y editar cotizaciones</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-[#ebe1d9] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formPermissions.canManageClients}
+                      onChange={() => handlePermissionToggle('canManageClients')}
+                      className="rounded accent-[#8d153e]"
+                    />
+                    <span>Gestionar cartera de clientes</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-[#ebe1d9] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formPermissions.canManageProduction}
+                      onChange={() => handlePermissionToggle('canManageProduction')}
+                      className="rounded accent-[#8d153e]"
+                    />
+                    <span>Avanzar órdenes en Kanban</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-[#ebe1d9] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formPermissions.canViewFinancials}
+                      onChange={() => handlePermissionToggle('canViewFinancials')}
+                      className="rounded accent-[#8d153e]"
+                    />
+                    <span>Ver costos y márgenes</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-[#ebe1d9] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formPermissions.canDeleteRecords}
+                      onChange={() => handlePermissionToggle('canDeleteRecords')}
+                      className="rounded accent-[#8d153e]"
+                    />
+                    <span>Eliminar cotizaciones / órdenes</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-[#ebe1d9] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formPermissions.canManageUsers}
+                      onChange={() => handlePermissionToggle('canManageUsers')}
+                      className="rounded accent-[#8d153e]"
+                    />
+                    <span>Crear y administrar usuarios</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => setEditingUser(null)}
+                  className="px-4 py-2 rounded-lg font-semibold text-[#debfc3] hover:bg-[#2e2924] cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-5 py-2.5 bg-[#8d153e] hover:bg-[#a61c4b] text-white rounded-lg font-semibold shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{isSaving ? 'Guardando en Firebase...' : 'Guardar Cambios en Firebase'}</span>
                 </button>
               </div>
             </form>

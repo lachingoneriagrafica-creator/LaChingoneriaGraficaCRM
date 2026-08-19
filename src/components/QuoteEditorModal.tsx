@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Quote, QuoteItem, Client, Product } from '../types';
 import { ProductPickerModal } from './ProductPickerModal';
+import { formatMXN } from '../utils/currencyUtils';
 
 interface QuoteEditorModalProps {
   isOpen: boolean;
@@ -454,7 +455,7 @@ export const QuoteEditorModal: React.FC<QuoteEditorModalProps> = ({
                         />
                       </td>
                       <td className="py-2.5 px-2 align-top text-right font-mono font-bold text-[#ffb1bf]">
-                        ${item.total.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {formatMXN(item.total)}
                       </td>
                       <td className="py-2.5 px-2 align-top text-center">
                         <button
@@ -527,7 +528,7 @@ export const QuoteEditorModal: React.FC<QuoteEditorModalProps> = ({
                 <div className="flex items-center justify-between text-[#debfc3] pb-2 border-b border-white/5">
                   <span>Subtotal</span>
                   <span className="font-mono font-semibold text-[#ebe1d9]">
-                    ${formData.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {formatMXN(formData.subtotal)}
                   </span>
                 </div>
 
@@ -536,7 +537,7 @@ export const QuoteEditorModal: React.FC<QuoteEditorModalProps> = ({
                     <span>IVA (16%)</span>
                   </div>
                   <span className="font-mono font-semibold text-[#ebe1d9]">
-                    ${formData.taxAmount.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {formatMXN(formData.taxAmount)}
                   </span>
                 </div>
 
@@ -546,7 +547,7 @@ export const QuoteEditorModal: React.FC<QuoteEditorModalProps> = ({
                     <span className="text-[10px] text-[#debfc3]">Pesos Mexicanos (MXN)</span>
                   </div>
                   <span className="font-mono text-xl sm:text-2xl font-bold text-[#ffb1bf]">
-                    ${formData.total.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {formatMXN(formData.total)}
                   </span>
                 </div>
               </div>

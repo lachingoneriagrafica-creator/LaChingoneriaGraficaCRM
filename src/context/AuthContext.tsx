@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   User, 
   signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword,
+  updateProfile,
   signOut, 
   onAuthStateChanged 
 } from 'firebase/auth';
@@ -14,7 +16,7 @@ import {
   collection, 
   onSnapshot 
 } from 'firebase/firestore';
-import { auth, db } from '../lib/firebase';
+import { auth, db, createFirebaseAuthUser } from '../lib/firebase';
 import { UserProfile, UserRole, ROLE_DEFAULT_PERMISSIONS } from '../types';
 
 interface AuthContextType {
@@ -32,16 +34,19 @@ interface AuthContextType {
     role: UserRole, 
     status: 'active' | 'pending' | 'disabled', 
     customPermissions?: Partial<UserProfile['permissions']>,
-    additionalData?: { displayName?: string; department?: string; phone?: string }
+    additionalData?: { displayName?: string; department?: string; phone?: string; photoURL?: string }
   ) => Promise<void>;
+  updateUserProfilePhoto: (uid: string, photoURL: string) => Promise<void>;
   createUserProfile: (
     profileData: {
       email: string;
+      password?: string;
       displayName: string;
       role: UserRole;
       status: 'active' | 'pending' | 'disabled';
       department?: string;
       phone?: string;
+      photoURL?: string;
       permissions?: Partial<UserProfile['permissions']>;
     }
   ) => Promise<string>;
@@ -226,6 +231,75 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Register with Email & Password directly from the app
+  const registerWithEmailPassword = async (
+    email: string, 
+    password: string, 
+    displayName: string, 
+    department?: string, 
+    phone?: string,
+    requestedRole?: UserRole
+  ) => {
+    try {
+      setLoading(true);
+      setAuthErrorMessage(null);
+      const userCred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      const firebaseUser = userCred.user;
+      
+      const cleanDisplayName = displayName.trim() || email.split('@')[0];
+      await updateProfile(firebaseUser, { displayName: cleanDisplayName }).catch(() => {});
+
+      const isMainAdmin = 
+        email.trim().toLowerCase() === 'lachingoneriagrafica@gmail.com' || 
+        email.trim().toLowerCase().includes('admin');
+      
+      const assignedRole: UserRole = isMainAdmin ? 'admin' : (requestedRole || 'gerente');
+
+      const newProfile: UserProfile = {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email || email.trim(),
+        displayName: cleanDisplayName,
+        role: assignedRole,
+        status: 'active',
+        department: department?.trim() || (isMainAdmin ? 'Dirección General' : 'Ventas & Cotizaciones'),
+        phone: phone?.trim() || '',
+        permissions: ROLE_DEFAULT_PERMISSIONS[assignedRole],
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString(),
+      };
+
+      await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
+
+      if (assignedRole === 'admin') {
+        await setDoc(doc(db, 'admins', firebaseUser.uid), {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          assignedAt: new Date().toISOString()
+        }).catch(() => {});
+      }
+
+      setUserProfile(newProfile);
+    } catch (error: any) {
+      const code = error?.code || '';
+      console.warn("Firebase register code:", code);
+
+      if (code === 'auth/email-already-in-use') {
+        setAuthErrorMessage('Este correo electrónico ya está registrado. Por favor selecciona "Iniciar Sesión".');
+      } else if (code === 'auth/weak-password') {
+        setAuthErrorMessage('La contraseña debe tener al menos 6 caracteres.');
+      } else if (code === 'auth/invalid-email') {
+        setAuthErrorMessage('El formato de correo electrónico no es válido.');
+      } else if (code === 'auth/operation-not-allowed') {
+        setAuthErrorMessage('El registro con correo y contraseña no está habilitado en Firebase Auth.');
+      } else {
+        setAuthErrorMessage(error?.message || 'Error al registrar la cuenta en Firebase.');
+      }
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Demo user login for testing and previewing
   const loginAsDemoUser = (role: UserRole) => {
     setAuthErrorMessage(null);
@@ -267,7 +341,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     role: UserRole, 
     status: 'active' | 'pending' | 'disabled',
     customPermissions?: Partial<UserProfile['permissions']>,
-    additionalData?: { displayName?: string; department?: string; phone?: string }
+    additionalData?: { displayName?: string; department?: string; phone?: string; photoURL?: string }
   ) => {
     const permissions = {
       ...ROLE_DEFAULT_PERMISSIONS[role],
@@ -284,6 +358,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (additionalData?.displayName) updatePayload.displayName = additionalData.displayName;
     if (additionalData?.department) updatePayload.department = additionalData.department;
     if (additionalData?.phone !== undefined) updatePayload.phone = additionalData.phone;
+    if (additionalData?.photoURL !== undefined) updatePayload.photoURL = additionalData.photoURL;
 
     try {
       const userRef = doc(db, 'users', uid);
@@ -329,17 +404,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Create new user profile in Firestore
+  // Update profile photo in Firestore and local state
+  const updateUserProfilePhoto = async (uid: string, photoURL: string) => {
+    try {
+      const userRef = doc(db, 'users', uid);
+      await updateDoc(userRef, { 
+        photoURL,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (err) {
+      console.warn("Firestore photo update warning:", err);
+    }
+
+    setAllUsers(prev => prev.map(u => u.uid === uid ? { ...u, photoURL } : u));
+    if (userProfile?.uid === uid) {
+      setUserProfile(prev => prev ? { ...prev, photoURL } : null);
+    }
+  };
+
+  // Create new user profile in Firestore (and Firebase Auth if password provided) by Super Admin
   const createUserProfile = async (profileData: {
     email: string;
+    password?: string;
     displayName: string;
     role: UserRole;
     status: 'active' | 'pending' | 'disabled';
     department?: string;
     phone?: string;
+    photoURL?: string;
     permissions?: Partial<UserProfile['permissions']>;
   }): Promise<string> => {
-    const uid = 'usr_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    let uid = 'usr_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+
+    // If a password was provided by the Super Admin, create real Firebase Auth credentials
+    if (profileData.password && profileData.password.length >= 6) {
+      try {
+        uid = await createFirebaseAuthUser(profileData.email.trim(), profileData.password);
+      } catch (authErr: any) {
+        console.warn("Firebase Auth user creation warning, using generated UID:", authErr);
+        if (authErr?.code === 'auth/email-already-in-use') {
+          throw new Error('El correo electrónico ya está registrado en Firebase Authentication.');
+        } else if (authErr?.code === 'auth/weak-password') {
+          throw new Error('La contraseña debe tener al menos 6 caracteres.');
+        } else {
+          throw new Error(authErr?.message || 'Error al crear credenciales en Firebase Auth.');
+        }
+      }
+    }
+
     const permissions = {
       ...ROLE_DEFAULT_PERMISSIONS[profileData.role],
       ...(profileData.permissions || {})
@@ -353,8 +465,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status: profileData.status,
       department: profileData.department || '',
       phone: profileData.phone || '',
+      photoURL: profileData.photoURL || undefined,
       permissions,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      lastLogin: new Date().toISOString()
     };
 
     try {
@@ -402,6 +516,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginAsDemoUser,
         logout,
         updateUserRoleAndPermissions,
+        updateUserProfilePhoto,
         createUserProfile,
         deleteUserProfile,
         activeRole,

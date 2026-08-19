@@ -13,6 +13,7 @@ import {
   Eye
 } from 'lucide-react';
 import { ProductionJob, ProductionStatus, Quote, Client } from '../types';
+import { formatMXN } from '../utils/currencyUtils';
 
 interface DashboardViewProps {
   jobs: ProductionJob[];
@@ -41,7 +42,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const urgentCount = jobs.filter(j => j.isUrgent).length;
   const registeredClientsCount = clients.length.toLocaleString('es-MX');
   const totalSales = quotes.reduce((acc, q) => acc + (q.total || 0), 0);
-  const totalSalesFormatted = '$' + totalSales.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const totalSalesFormatted = formatMXN(totalSales);
 
   const getStatusBadge = (status: ProductionStatus) => {
     switch (status) {
