@@ -13,7 +13,7 @@ import {
   collection, 
   onSnapshot 
 } from 'firebase/firestore';
-import { auth, db, testFirestoreConnection } from '../lib/firebase';
+import { auth, db } from '../lib/firebase';
 import { UserProfile, UserRole, ROLE_DEFAULT_PERMISSIONS } from '../types';
 
 interface AuthContextType {
@@ -96,11 +96,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [simulatedRole, setSimulatedRoleState] = useState<UserRole | null>(null);
 
   const clearAuthError = () => setAuthErrorMessage(null);
-
-  // Test connection on boot
-  useEffect(() => {
-    testFirestoreConnection();
-  }, []);
 
   // Listen to Firebase Auth state
   useEffect(() => {
